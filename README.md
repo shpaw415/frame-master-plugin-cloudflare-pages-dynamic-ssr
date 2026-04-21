@@ -41,6 +41,8 @@ export default config;
 - Uses a modular hydration adapter contract so hydration logic is reusable.
 - Supports optional `parseOutput` hook to transform final HTML at Cloudflare runtime.
 
+The generated `functions/` directory is always written at the root of the project to match Cloudflare Pages Functions conventions.
+
 ## Route Mapping
 
 The plugin derives routes from paths relative to `basePath`:
@@ -83,13 +85,15 @@ type HydrationConfig = {
 
 type CloudflarePagesDynamicSSROptions = {
   basePath?: string; // default: "pages"
-  generatedDir?: string; // default: ".frame-master/generated/cloudflare-pages-dynamic-ssr"
+  generatedDir?: string; // default: ".frame-master/generated/cloudflare-pages-dynamic-ssr" (internal client/runtime assets only)
   publicClientPath?: string; // default: "/_dynamic"
   parseOutput?: ParseOutputModuleConfig;
   hydration?: HydrationConfig;
   verbose?: boolean; // default: false
 };
 ```
+
+`generatedDir` does not move the Cloudflare Pages `functions/` output. It only controls where the plugin stores its internal generated client and runtime helper modules.
 
 ## Reusable Hydration Adapters
 
@@ -121,6 +125,19 @@ type ClientHydrationAdapterArgs = {
 };
 
 export default function hydrationClientAdapter(args: ClientHydrationAdapterArgs): void;
+```
+
+Small example custom adapters are available in [docs/examples/custom-hydration/server-adapter.ts](docs/examples/custom-hydration/server-adapter.ts), [docs/examples/custom-hydration/client-adapter.ts](docs/examples/custom-hydration/client-adapter.ts), and [docs/examples/custom-hydration/README.md](docs/examples/custom-hydration/README.md).
+
+Example configuration:
+
+```ts
+cloudflarepagesdynamicssr({
+  hydration: {
+    serverAdapterModule: "./docs/examples/custom-hydration/server-adapter.ts",
+    clientAdapterModule: "./docs/examples/custom-hydration/client-adapter.ts",
+  },
+});
 ```
 
 ## Optional HTML Output Parser

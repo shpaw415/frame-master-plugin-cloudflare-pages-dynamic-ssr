@@ -1,5 +1,8 @@
+import { mkdtempSync, existsSync, mkdirSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join, resolve } from "path";
 import { describe, expect, test } from "bun:test";
-import { __internal } from "../index";
+import cloudflarePagesDynamicSSR, { __internal } from "../index";
 
 describe("cloudflare-pages-dynamic-ssr internals", () => {
 	test("detects top-file use-dynamic directive", () => {
@@ -80,5 +83,107 @@ describe("cloudflare-pages-dynamic-ssr internals", () => {
 	test("builds stable route keys for generated assets", () => {
 		expect(__internal.routeToKey("/")).toBe("root");
 		expect(__internal.routeToKey("/blog/post")).toBe("blog__post");
+	});
+
+	test("generates files for a real pages fixture tree", async () => {
+		const fixturePagesDir = resolve(
+			process.cwd(),
+			"tests/fixtures/basic/pages",
+		);
+		const projectRoot = mkdtempSync(
+			join(tmpdir(), "cf-pages-dynamic-ssr-project-"),
+		);
+		const generatedDir = join(
+			projectRoot,
+			".frame-master/generated/cloudflare-pages-dynamic-ssr",
+		);
+		const originalCwd = process.cwd();
+
+		try {
+			mkdirSync(join(projectRoot, "pages", "blog"), { recursive: true });
+			mkdirSync(join(projectRoot, "pages", "users"), { recursive: true });
+			await Bun.write(
+				join(projectRoot, "pages", "index.tsx"),
+				await Bun.file(join(fixturePagesDir, "index.tsx")).text(),
+			);
+			await Bun.write(
+				join(projectRoot, "pages", "about.tsx"),
+				await Bun.file(join(fixturePagesDir, "about.tsx")).text(),
+			);
+			await Bun.write(
+				join(projectRoot, "pages", "ignored.tsx"),
+				await Bun.file(join(fixturePagesDir, "ignored.tsx")).text(),
+			);
+			await Bun.write(
+				join(projectRoot, "pages", "blog", "index.tsx"),
+				await Bun.file(join(fixturePagesDir, "blog", "index.tsx")).text(),
+			);
+			await Bun.write(
+				join(projectRoot, "pages", "users", "[id].tsx"),
+				await Bun.file(join(fixturePagesDir, "users", "[id].tsx")).text(),
+			);
+
+			process.chdir(projectRoot);
+
+			const plugin = cloudflarePagesDynamicSSR({
+				basePath: "pages",
+				generatedDir,
+				publicClientPath: "/_fixture-dynamic",
+			});
+
+			if (typeof plugin.build?.buildConfig !== "function") {
+				throw new Error("Expected plugin buildConfig to be a function");
+			}
+
+			const config = await plugin.build.buildConfig(undefined as never);
+			const entrypoints = Array.isArray(config.entrypoints)
+				? config.entrypoints
+				: [];
+			const rootFunctionsDir = join(projectRoot, "functions");
+
+			const expectedFiles = [
+				join(rootFunctionsDir, "index.ts"),
+				join(rootFunctionsDir, "about.ts"),
+				join(rootFunctionsDir, "blog.ts"),
+				join(rootFunctionsDir, "users", "[id].ts"),
+				join(generatedDir, "client", "root.ts"),
+				join(generatedDir, "client", "about.ts"),
+				join(generatedDir, "client", "blog.ts"),
+				join(generatedDir, "client", "users__[id].ts"),
+				join(generatedDir, "runtime", "server.ts"),
+				join(generatedDir, "runtime", "default-server-adapter.ts"),
+				join(generatedDir, "runtime", "default-client-adapter.ts"),
+			];
+
+			for (const filePath of expectedFiles) {
+				expect(existsSync(filePath)).toBeTrue();
+			}
+
+			expect(existsSync(join(rootFunctionsDir, "ignored.ts"))).toBeFalse();
+			expect(entrypoints).toContain(join(rootFunctionsDir, "index.ts"));
+			expect(entrypoints).toContain(join(generatedDir, "client", "root.ts"));
+
+			const generatedServerRoute = await Bun.file(
+				join(rootFunctionsDir, "users", "[id].ts"),
+			).text();
+			expect(
+				generatedServerRoute.includes('routePath: "/users/[id]"'),
+			).toBeTrue();
+			expect(
+				generatedServerRoute.includes(
+					'clientScriptPath: "/_fixture-dynamic/users__[id].js"',
+				),
+			).toBeTrue();
+
+			const generatedClientRoute = await Bun.file(
+				join(generatedDir, "client", "root.ts"),
+			).text();
+			expect(
+				generatedClientRoute.includes("hydrationClientAdapter"),
+			).toBeTrue();
+		} finally {
+			process.chdir(originalCwd);
+			rmSync(projectRoot, { recursive: true, force: true });
+		}
 	});
 });

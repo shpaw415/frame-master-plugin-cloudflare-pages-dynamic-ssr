@@ -43,6 +43,11 @@ type GenerationState = {
 	plans: DynamicRoutePlan[];
 	entrypoints: string[];
 	generatedDir: string;
+	functionsDir: string;
+};
+
+type GeneratedManifest = {
+	files: string[];
 };
 
 const DEFAULT_GENERATED_DIR =
@@ -50,6 +55,7 @@ const DEFAULT_GENERATED_DIR =
 const DEFAULT_PUBLIC_CLIENT_PATH = "/_dynamic";
 const DEFAULT_MOUNT_SELECTOR = "#app";
 const DEFAULT_PAYLOAD_ELEMENT_ID = "__FM_DYNAMIC_PAYLOAD__";
+const GENERATED_MANIFEST_FILE = "manifest.json";
 
 function toPosixPath(value: string): string {
 	return value.replaceAll("\\", "/");
@@ -220,6 +226,53 @@ async function writeFileWithParents(
 ): Promise<void> {
 	mkdirSync(dirname(path), { recursive: true });
 	await Bun.write(path, content);
+}
+
+async function removeGeneratedFiles(filePaths: string[]): Promise<void> {
+	await Promise.all(
+		filePaths.map(async (filePath) => {
+			try {
+				await Bun.file(filePath).delete();
+			} catch {
+				// Ignore missing files from older manifests.
+			}
+		}),
+	);
+}
+
+async function readGeneratedManifest(
+	generatedDir: string,
+): Promise<GeneratedManifest> {
+	const manifestPath = join(generatedDir, GENERATED_MANIFEST_FILE);
+	const manifestFile = Bun.file(manifestPath);
+	if (!(await manifestFile.exists())) {
+		return { files: [] };
+	}
+
+	try {
+		const parsed = JSON.parse(
+			await manifestFile.text(),
+		) as Partial<GeneratedManifest>;
+		return {
+			files: Array.isArray(parsed.files)
+				? parsed.files.filter(
+						(entry): entry is string => typeof entry === "string",
+					)
+				: [],
+		};
+	} catch {
+		return { files: [] };
+	}
+}
+
+async function writeGeneratedManifest(
+	generatedDir: string,
+	manifest: GeneratedManifest,
+): Promise<void> {
+	await writeFileWithParents(
+		join(generatedDir, GENERATED_MANIFEST_FILE),
+		JSON.stringify(manifest, null, 2),
+	);
 }
 
 async function writeRuntimeFiles(generatedDir: string): Promise<void> {
@@ -434,9 +487,13 @@ async function generateArtifacts(
 	const cwd = process.cwd();
 	const baseDir = resolve(cwd, resolvedOptions.basePath);
 	const generatedDir = resolve(cwd, resolvedOptions.generatedDir);
+	const functionsDir = resolve(cwd, "functions");
+	const previousManifest = await readGeneratedManifest(generatedDir);
+	await removeGeneratedFiles(previousManifest.files);
 
 	rmSync(generatedDir, { recursive: true, force: true });
 	mkdirSync(generatedDir, { recursive: true });
+	mkdirSync(functionsDir, { recursive: true });
 
 	await writeRuntimeFiles(generatedDir);
 
@@ -444,15 +501,12 @@ async function generateArtifacts(
 	const plans: DynamicRoutePlan[] = [];
 	const functionEntrypoints: string[] = [];
 	const clientEntrypoints: string[] = [];
+	const generatedFiles: string[] = [];
 
 	for (const filePath of files) {
 		const routePath = makeRoutePath(baseDir, filePath);
 		const routeKey = routeToKey(routePath);
-		const functionFile = join(
-			generatedDir,
-			"functions",
-			routeToEntryFile(routePath),
-		);
+		const functionFile = join(functionsDir, routeToEntryFile(routePath));
 		const clientFile = join(generatedDir, "client", `${routeKey}.ts`);
 		const clientPublicPath = `${resolvedOptions.publicClientPath}/${routeKey}.js`;
 
@@ -467,6 +521,7 @@ async function generateArtifacts(
 
 		functionEntrypoints.push(functionFile);
 		clientEntrypoints.push(clientFile);
+		generatedFiles.push(functionFile, clientFile);
 
 		const runtimeServerPath = join(generatedDir, "runtime", "server.ts");
 		const runtimeDefaultServerAdapterPath = join(
@@ -540,10 +595,18 @@ if (payloadNode && mountElement) {
 		);
 	}
 
+	generatedFiles.push(
+		join(generatedDir, "runtime", "server.ts"),
+		join(generatedDir, "runtime", "default-server-adapter.ts"),
+		join(generatedDir, "runtime", "default-client-adapter.ts"),
+	);
+	await writeGeneratedManifest(generatedDir, { files: generatedFiles });
+
 	return {
 		plans,
 		entrypoints: [...functionEntrypoints, ...clientEntrypoints],
 		generatedDir,
+		functionsDir,
 	};
 }
 
@@ -558,6 +621,7 @@ export default function cloudflarePagesDynamicSSR(
 		plans: [],
 		entrypoints: [],
 		generatedDir: resolve(process.cwd(), resolvedOptions.generatedDir),
+		functionsDir: resolve(process.cwd(), "functions"),
 	};
 
 	return {
@@ -589,7 +653,7 @@ export default function cloudflarePagesDynamicSSR(
 					return;
 				}
 				console.log(
-					`[cloudflare-pages-dynamic-ssr] Generated ${state.plans.length} dynamic routes in ${state.generatedDir}`,
+					`[cloudflare-pages-dynamic-ssr] Generated ${state.plans.length} dynamic routes in ${state.functionsDir}`,
 				);
 			},
 		},
