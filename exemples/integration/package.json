@@ -10,11 +10,13 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
-		"frame-master": "^3.1.1",
-		"cloudflare-pages-dynamic-ssr": "file:../../"
+		"cloudflare-pages-dynamic-ssr": "https://github.com/shpaw415/frame-master-plugin-cloudflare-pages-dynamic-ssr.git",
+		"frame-master": "^3.1.2"
 	},
 	"scripts": {
 		"dev": "NODE_ENV=development bun --hot frame-master dev",
-		"start": "NODE_ENV=production bun frame-master start"
+		"start": "NODE_ENV=production bun frame-master start",
+		"build:dev": "NODE_ENV=development bun frame-master build",
+		"build": "NODE_ENV=production bun frame-master build"
 	}
 }

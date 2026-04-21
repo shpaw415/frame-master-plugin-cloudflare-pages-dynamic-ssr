@@ -5,8 +5,8 @@
     "": {
       "name": "test-project",
       "dependencies": {
-        "cloudflare-pages-dynamic-ssr": "file:../../",
-        "frame-master": "^3.1.1",
+        "cloudflare-pages-dynamic-ssr": "https://github.com/shpaw415/frame-master-plugin-cloudflare-pages-dynamic-ssr.git",
+        "frame-master": "^3.1.2",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -33,11 +33,11 @@
 
     "chownr": ["chownr@3.0.0", "", {}, "sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g=="],
 
-    "cloudflare-pages-dynamic-ssr": ["cloudflare-pages-dynamic-ssr@file:../..", { "devDependencies": { "@types/bun": "latest", "typescript": "^6.0.3" }, "peerDependencies": { "frame-master": "^3.1.1" } }],
+    "cloudflare-pages-dynamic-ssr": ["cloudflare-pages-dynamic-ssr@github:shpaw415/frame-master-plugin-cloudflare-pages-dynamic-ssr#0a02bd6", { "peerDependencies": { "frame-master": "^3.1.1" } }, "shpaw415-frame-master-plugin-cloudflare-pages-dynamic-ssr-0a02bd6", "sha512-8WwTW4wSmwM4Ii5Bx3nsEONX5wdhUL5r6f/zliD2YKwAoANIqfp2So9rhsVyvLG3CQKimFUPYvf/iA/M8w9q7Q=="],
 
     "commander": ["commander@14.0.3", "", {}, "sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw=="],
 
-    "frame-master": ["frame-master@3.1.1", "", { "dependencies": { "@shpaw415/webtoken": "^2.0.0", "@types/git": "^0.0.21", "chalk": "^5.6.2", "commander": "^14.0.2", "git": "^0.1.5", "react": "^19.2.3", "react-dom": "^19.2.3", "tar": "^7.5.2" }, "peerDependencies": { "typescript": "^5.9.3" }, "bin": { "frame-master": "bin/index.ts" } }, "sha512-X6ZFF+3cgQeV+aAEdmbfO8OX12eG619rQMopT4dageEbwZ7zmNx1ckqWNadwS975GlwEC7i85eGlyAs+MC8xuQ=="],
+    "frame-master": ["frame-master@3.1.2", "", { "dependencies": { "@shpaw415/webtoken": "^2.0.0", "@types/git": "^0.0.21", "chalk": "^5.6.2", "commander": "^14.0.2", "git": "^0.1.5", "react": "^19.2.3", "react-dom": "^19.2.3", "tar": "^7.5.2" }, "peerDependencies": { "typescript": "^6.0.3" }, "bin": { "frame-master": "bin/index.ts" } }, "sha512-nlHQohgPzqpvBK/YLP+LUYGIXq4qlB7IgQUG6Jdhc1svO1mklKNmGkynBoIIfbkDeYfwRCu8KAz4ZBqOftd2ew=="],
 
     "git": ["git@0.1.5", "", { "dependencies": { "mime": "1.2.9" } }, "sha512-N+bfOrXyKMU/fQtCj6D/U9MQOEN0DAA8TLHSLdUQRSWBOkeRvsjJHdrdkvcq05xO7GSDKWc3nDEGoTZ4DfCCSg=="],
 
@@ -60,7 +60,5 @@
     "undici-types": ["undici-types@7.19.2", "", {}, "sha512-qYVnV5OEm2AW8cJMCpdV20CDyaN3g0AjDlOGf1OW4iaDEx8MwdtChUp4zu4H0VP3nDRF/8RKWH+IPp9uW0YGZg=="],
 
     "yallist": ["yallist@5.0.0", "", {}, "sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw=="],
-
-    "cloudflare-pages-dynamic-ssr/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
   }
 }

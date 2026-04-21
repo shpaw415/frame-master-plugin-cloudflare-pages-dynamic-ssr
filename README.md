@@ -36,12 +36,12 @@ export default config;
 - Scans `.tsx` and `.jsx` files under `basePath` during build.
 - Includes only pages with a top-file `"use-dynamic"` directive.
 - Validates that each matched file default-exports a function component.
-- Generates Cloudflare Pages `functions/` entrypoints from file-based routes.
+- Generates transpiled Cloudflare Pages `functions/*.js` entrypoints at the project root.
 - Generates matching client hydration entries for full-page React hydration.
 - Uses a modular hydration adapter contract so hydration logic is reusable.
 - Supports optional `parseOutput` hook to transform final HTML at Cloudflare runtime.
 
-The generated `functions/` directory is always written at the root of the project to match Cloudflare Pages Functions conventions.
+The generated `functions/` directory is always written at the root of the project to match Cloudflare Pages Functions conventions, and the files written there are bundled `.js` outputs. Intermediate TypeScript source files are kept in the plugin's internal generated directory.
 
 ## Route Mapping
 
@@ -93,7 +93,7 @@ type CloudflarePagesDynamicSSROptions = {
 };
 ```
 
-`generatedDir` does not move the Cloudflare Pages `functions/` output. It only controls where the plugin stores its internal generated client and runtime helper modules.
+`generatedDir` does not move the Cloudflare Pages `functions/` output. It only controls where the plugin stores its internal generated TypeScript sources, client entries, and runtime helper modules before the root `functions/*.js` files are emitted.
 
 ## Reusable Hydration Adapters
 

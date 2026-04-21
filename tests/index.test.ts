@@ -1,4 +1,4 @@
-import { mkdtempSync, existsSync, mkdirSync, rmSync } from "fs";
+import { mkdtempSync, existsSync, mkdirSync, rmSync, symlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import { describe, expect, test } from "bun:test";
@@ -102,6 +102,10 @@ describe("cloudflare-pages-dynamic-ssr internals", () => {
 		try {
 			mkdirSync(join(projectRoot, "pages", "blog"), { recursive: true });
 			mkdirSync(join(projectRoot, "pages", "users"), { recursive: true });
+			symlinkSync(
+				resolve(originalCwd, "node_modules"),
+				join(projectRoot, "node_modules"),
+			);
 			await Bun.write(
 				join(projectRoot, "pages", "index.tsx"),
 				await Bun.file(join(fixturePagesDir, "index.tsx")).text(),
@@ -136,16 +140,28 @@ describe("cloudflare-pages-dynamic-ssr internals", () => {
 			}
 
 			const config = await plugin.build.buildConfig(undefined as never);
+			if (typeof plugin.build?.afterBuild !== "function") {
+				throw new Error("Expected plugin afterBuild to be a function");
+			}
+			await plugin.build.afterBuild(
+				undefined as never,
+				{ success: true, logs: [], outputs: [] },
+				undefined as never,
+			);
 			const entrypoints = Array.isArray(config.entrypoints)
 				? config.entrypoints
 				: [];
 			const rootFunctionsDir = join(projectRoot, "functions");
 
 			const expectedFiles = [
-				join(rootFunctionsDir, "index.ts"),
-				join(rootFunctionsDir, "about.ts"),
-				join(rootFunctionsDir, "blog.ts"),
-				join(rootFunctionsDir, "users", "[id].ts"),
+				join(rootFunctionsDir, "index.js"),
+				join(rootFunctionsDir, "about.js"),
+				join(rootFunctionsDir, "blog.js"),
+				join(rootFunctionsDir, "users", "[id].js"),
+				join(generatedDir, "functions-src", "index.ts"),
+				join(generatedDir, "functions-src", "about.ts"),
+				join(generatedDir, "functions-src", "blog.ts"),
+				join(generatedDir, "functions-src", "users", "[id].ts"),
 				join(generatedDir, "client", "root.ts"),
 				join(generatedDir, "client", "about.ts"),
 				join(generatedDir, "client", "blog.ts"),
@@ -159,21 +175,17 @@ describe("cloudflare-pages-dynamic-ssr internals", () => {
 				expect(existsSync(filePath)).toBeTrue();
 			}
 
-			expect(existsSync(join(rootFunctionsDir, "ignored.ts"))).toBeFalse();
-			expect(entrypoints).toContain(join(rootFunctionsDir, "index.ts"));
+			expect(existsSync(join(rootFunctionsDir, "ignored.js"))).toBeFalse();
+			expect(entrypoints).not.toContain(join(rootFunctionsDir, "index.js"));
 			expect(entrypoints).toContain(join(generatedDir, "client", "root.ts"));
 
 			const generatedServerRoute = await Bun.file(
-				join(rootFunctionsDir, "users", "[id].ts"),
+				join(rootFunctionsDir, "users", "[id].js"),
 			).text();
 			expect(
-				generatedServerRoute.includes('routePath: "/users/[id]"'),
+				generatedServerRoute.includes('"/_fixture-dynamic/users__[id].js"'),
 			).toBeTrue();
-			expect(
-				generatedServerRoute.includes(
-					'clientScriptPath: "/_fixture-dynamic/users__[id].js"',
-				),
-			).toBeTrue();
+			expect(generatedServerRoute.includes("renderDynamicPage")).toBeTrue();
 
 			const generatedClientRoute = await Bun.file(
 				join(generatedDir, "client", "root.ts"),

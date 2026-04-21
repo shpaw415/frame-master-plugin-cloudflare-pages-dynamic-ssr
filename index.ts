@@ -34,6 +34,7 @@ type DynamicRoutePlan = {
 	filePath: string;
 	routePath: string;
 	functionEntrypoint: string;
+	functionOutputPath: string;
 	clientEntrypoint: string;
 	clientPublicPath: string;
 	routeKey: string;
@@ -109,6 +110,13 @@ function routeToEntryFile(routePath: string): string {
 		return "index.ts";
 	}
 	return `${routePath.slice(1)}.ts`;
+}
+
+function routeToOutputFile(routePath: string): string {
+	if (routePath === "/") {
+		return "index.js";
+	}
+	return `${routePath.slice(1)}.js`;
 }
 
 function routeToKey(routePath: string): string {
@@ -386,6 +394,31 @@ export async function renderDynamicPage(args: RenderArgs): Promise<Response> {
 	);
 }
 
+async function transpileFunctionEntries(plans: DynamicRoutePlan[]): Promise<void> {
+	for (const plan of plans) {
+		mkdirSync(dirname(plan.functionOutputPath), { recursive: true });
+		const result = await Bun.build({
+			entrypoints: [plan.functionEntrypoint],
+			outdir: dirname(plan.functionOutputPath),
+			format: "esm",
+			target: "browser",
+			minify: false,
+			sourcemap: "none",
+		});
+
+		if (!result.success) {
+			const messages = result.logs
+				.map((log) => log.message)
+				.filter((message): message is string => typeof message === "string")
+				.join("\n");
+			const details = messages ? `\n${messages}` : "";
+			throw new Error(
+				`[cloudflare-pages-dynamic-ssr] Failed to transpile ${plan.routePath} to ${plan.functionOutputPath}${details}`,
+			);
+		}
+	}
+}
+
 function parseOutputImport(
 	parseOutput: ParseOutputModuleConfig,
 	routeFilePath: string,
@@ -499,14 +532,18 @@ async function generateArtifacts(
 
 	const files = await discoverDynamicPages(baseDir);
 	const plans: DynamicRoutePlan[] = [];
-	const functionEntrypoints: string[] = [];
 	const clientEntrypoints: string[] = [];
 	const generatedFiles: string[] = [];
 
 	for (const filePath of files) {
 		const routePath = makeRoutePath(baseDir, filePath);
 		const routeKey = routeToKey(routePath);
-		const functionFile = join(functionsDir, routeToEntryFile(routePath));
+		const functionFile = join(
+			generatedDir,
+			"functions-src",
+			routeToEntryFile(routePath),
+		);
+		const functionOutputPath = join(functionsDir, routeToOutputFile(routePath));
 		const clientFile = join(generatedDir, "client", `${routeKey}.ts`);
 		const clientPublicPath = `${resolvedOptions.publicClientPath}/${routeKey}.js`;
 
@@ -514,14 +551,14 @@ async function generateArtifacts(
 			filePath,
 			routePath,
 			functionEntrypoint: functionFile,
+			functionOutputPath,
 			clientEntrypoint: clientFile,
 			clientPublicPath,
 			routeKey,
 		});
 
-		functionEntrypoints.push(functionFile);
 		clientEntrypoints.push(clientFile);
-		generatedFiles.push(functionFile, clientFile);
+		generatedFiles.push(functionFile, functionOutputPath, clientFile);
 
 		const runtimeServerPath = join(generatedDir, "runtime", "server.ts");
 		const runtimeDefaultServerAdapterPath = join(
@@ -604,7 +641,7 @@ if (payloadNode && mountElement) {
 
 	return {
 		plans,
-		entrypoints: [...functionEntrypoints, ...clientEntrypoints],
+		entrypoints: clientEntrypoints,
 		generatedDir,
 		functionsDir,
 	};
@@ -636,7 +673,6 @@ export default function cloudflarePagesDynamicSSR(
 		],
 
 		build: {
-			enableLoging: resolvedOptions.verbose,
 			buildConfig: async () => {
 				state = await generateArtifacts(resolvedOptions);
 				return {
@@ -649,38 +685,13 @@ export default function cloudflarePagesDynamicSSR(
 				}
 			},
 			afterBuild: async () => {
+				await transpileFunctionEntries(state.plans);
 				if (!resolvedOptions.verbose) {
 					return;
 				}
 				console.log(
 					`[cloudflare-pages-dynamic-ssr] Generated ${state.plans.length} dynamic routes in ${state.functionsDir}`,
 				);
-			},
-		},
-
-		router: {
-			before_request: async () => {},
-			request: async () => {},
-			after_request: async () => {},
-			html_rewrite: {
-				initContext: () => ({}),
-				rewrite: async () => {},
-				after: async () => {},
-			},
-		},
-
-		serverStart: {
-			main: async () => {
-				if (resolvedOptions.verbose) {
-					console.log("cloudflare-pages-dynamic-ssr initialized");
-				}
-			},
-			dev_main: async () => {
-				if (resolvedOptions.verbose) {
-					console.log(
-						"cloudflare-pages-dynamic-ssr running in development mode",
-					);
-				}
 			},
 		},
 
