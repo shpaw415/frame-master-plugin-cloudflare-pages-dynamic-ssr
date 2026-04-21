@@ -1,9 +1,0 @@
-{
-  "files": [
-    "/home/shpaw415/frame-master-plugins/cloudflare-pages-dynamic-ssr/exemples/integration/functions/[id].ts",
-    "/home/shpaw415/frame-master-plugins/cloudflare-pages-dynamic-ssr/exemples/integration/.frame-master/generated/cloudflare-pages-dynamic-ssr/client/[id].ts",
-    "/home/shpaw415/frame-master-plugins/cloudflare-pages-dynamic-ssr/exemples/integration/.frame-master/generated/cloudflare-pages-dynamic-ssr/runtime/server.ts",
-    "/home/shpaw415/frame-master-plugins/cloudflare-pages-dynamic-ssr/exemples/integration/.frame-master/generated/cloudflare-pages-dynamic-ssr/runtime/default-server-adapter.ts",
-    "/home/shpaw415/frame-master-plugins/cloudflare-pages-dynamic-ssr/exemples/integration/.frame-master/generated/cloudflare-pages-dynamic-ssr/runtime/default-client-adapter.ts"
-  ]
-}
