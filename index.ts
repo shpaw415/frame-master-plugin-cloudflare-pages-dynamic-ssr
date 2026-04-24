@@ -1,711 +1,279 @@
-import { dirname, extname, join, relative, resolve } from "path";
-import { mkdirSync, rmSync } from "fs";
-import type { FrameMasterPlugin } from "frame-master/plugin/types";
-import * as ts from "typescript";
-import { name, version } from "./package.json";
+import { join, relative } from "node:path";
+import {
+	type Directives,
+	type FrameMasterPlugin,
+	getGlobalPluginContext,
+} from "frame-master/plugin";
+import {
+	createDirective,
+	directiveToolSingleton,
+} from "frame-master/plugin/utils";
+import { name, version, peerDependencies } from "./package.json";
+import type { RequestContextData } from "./src/provider/shared";
+import "frame-master-plugin-build-unifier";
+import type { JSX } from "react";
 
-const USE_DYNAMIC_REGEX =
-	/^(?:\s*(?:\/\/.*?\n|\s)*)?['"]use[-\s]dynamic['"];?\s*(?:\/\/.*)?(?:\r?\n|$)/m;
-
-export type ParseOutputModuleConfig = {
-	module: string;
-	exportName?: string;
-};
-
-export type HydrationConfig = {
-	mountSelector?: string;
-	payloadElementId?: string;
-	serverAdapterModule?: string;
-	serverAdapterExportName?: string;
-	clientAdapterModule?: string;
-	clientAdapterExportName?: string;
-};
+declare module "frame-master/plugin/utils" {
+	interface CustomDirectives {
+		"use-dynamic": true;
+	}
+}
 
 export type CloudflarePagesDynamicSSROptions = {
+	/**
+	 * action path for dynamic page files. This is the base path that will be used to serve the dynamic page files.
+	 */
+	actionBasePath: string;
+	/**
+	 * base path for scanning dynamic page files. This is the base path that the plugin will use to scan for dynamic page files in your project. The default value is "src/pages". You can change this to any directory you want, but make sure to update your Cloudflare Pages Functions configuration accordingly to point to the correct path for your dynamic page files.
+	 */
 	basePath?: string;
-	generatedDir?: string;
-	publicClientPath?: string;
-	parseOutput?: ParseOutputModuleConfig;
-	hydration?: HydrationConfig;
-	verbose?: boolean;
-};
-
-type DynamicRoutePlan = {
-	filePath: string;
-	routePath: string;
-	functionEntrypoint: string;
-	functionOutputPath: string;
-	clientEntrypoint: string;
-	clientPublicPath: string;
-	routeKey: string;
-};
-
-type GenerationState = {
-	plans: DynamicRoutePlan[];
-	entrypoints: string[];
-	generatedDir: string;
-	functionsDir: string;
-};
-
-type GeneratedManifest = {
-	files: string[];
-};
-
-const DEFAULT_GENERATED_DIR =
-	".frame-master/generated/cloudflare-pages-dynamic-ssr";
-const DEFAULT_PUBLIC_CLIENT_PATH = "/_dynamic";
-const DEFAULT_MOUNT_SELECTOR = "#app";
-const DEFAULT_PAYLOAD_ELEMENT_ID = "__FM_DYNAMIC_PAYLOAD__";
-const GENERATED_MANIFEST_FILE = "manifest.json";
-
-function toPosixPath(value: string): string {
-	return value.replaceAll("\\", "/");
-}
-
-function ensureImportSpecifier(fromFile: string, toFile: string): string {
-	const rel = toPosixPath(relative(dirname(fromFile), toFile));
-	if (rel.startsWith(".")) {
-		return rel;
-	}
-	return `./${rel}`;
-}
-
-function isBareModuleSpecifier(value: string): boolean {
-	if (value.startsWith(".")) {
-		return false;
-	}
-	if (value.startsWith("/")) {
-		return false;
-	}
-	return !value.includes(":");
-}
-
-function makeProjectImportSpecifier(
-	fromFile: string,
-	requested: string,
-): string {
-	if (isBareModuleSpecifier(requested)) {
-		return requested;
-	}
-	const absTarget = requested.startsWith("/")
-		? requested
-		: resolve(process.cwd(), requested);
-	return ensureImportSpecifier(fromFile, absTarget);
-}
-
-function makeRoutePath(baseDir: string, filePath: string): string {
-	const relativePath = toPosixPath(relative(baseDir, filePath));
-	const extension = extname(relativePath);
-	const withoutExt = relativePath.slice(0, -extension.length);
-	const normalized = withoutExt.endsWith("/index")
-		? withoutExt.slice(0, -"/index".length)
-		: withoutExt === "index"
-			? ""
-			: withoutExt;
-	return normalized === "" ? "/" : `/${normalized}`;
-}
-
-function routeToEntryFile(routePath: string): string {
-	if (routePath === "/") {
-		return "index.ts";
-	}
-	return `${routePath.slice(1)}.ts`;
-}
-
-function routeToOutputFile(routePath: string): string {
-	if (routePath === "/") {
-		return "index.js";
-	}
-	return `${routePath.slice(1)}.js`;
-}
-
-function routeToKey(routePath: string): string {
-	return routePath === "/" ? "root" : routePath.slice(1).replaceAll("/", "__");
-}
-
-function hasUseDynamicDirective(source: string): boolean {
-	return USE_DYNAMIC_REGEX.test(source);
-}
-
-function functionLikeFromIdentifier(
-	identifierName: string,
-	sourceFile: ts.SourceFile,
-): boolean {
-	for (const statement of sourceFile.statements) {
-		if (
-			ts.isFunctionDeclaration(statement) &&
-			statement.name?.text === identifierName
-		) {
-			return true;
-		}
-		if (ts.isVariableStatement(statement)) {
-			for (const decl of statement.declarationList.declarations) {
-				if (!ts.isIdentifier(decl.name)) {
-					continue;
-				}
-				if (decl.name.text !== identifierName) {
-					continue;
-				}
-				const init = decl.initializer;
-				if (!init) {
-					continue;
-				}
-				if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
-					return true;
-				}
-			}
-		}
-	}
-	return false;
-}
-
-function hasDefaultExportedFunction(source: string, filePath: string): boolean {
-	const sourceFile = ts.createSourceFile(
-		filePath,
-		source,
-		ts.ScriptTarget.Latest,
-		true,
-		filePath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.JSX,
-	);
-
-	for (const statement of sourceFile.statements) {
-		if (ts.isFunctionDeclaration(statement)) {
-			const hasDefault = Boolean(
-				statement.modifiers?.some(
-					(m) => m.kind === ts.SyntaxKind.DefaultKeyword,
-				),
-			);
-			const hasExport = Boolean(
-				statement.modifiers?.some(
-					(m) => m.kind === ts.SyntaxKind.ExportKeyword,
-				),
-			);
-			if (hasDefault && hasExport) {
-				return true;
-			}
-		}
-
-		if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
-			const expr = statement.expression;
-			if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
-				return true;
-			}
-			if (ts.isIdentifier(expr)) {
-				if (functionLikeFromIdentifier(expr.text, sourceFile)) {
-					return true;
-				}
-			}
-		}
-	}
-
-	return false;
-}
-
-async function discoverDynamicPages(baseDir: string): Promise<string[]> {
-	const matches = new Set<string>();
-	for await (const relPath of new Bun.Glob("**/*.tsx").scan({ cwd: baseDir })) {
-		matches.add(resolve(baseDir, relPath));
-	}
-	for await (const relPath of new Bun.Glob("**/*.jsx").scan({ cwd: baseDir })) {
-		matches.add(resolve(baseDir, relPath));
-	}
-
-	const dynamicFiles: string[] = [];
-	for (const absPath of matches) {
-		const source = await Bun.file(absPath).text();
-		if (!hasUseDynamicDirective(source)) {
-			continue;
-		}
-		if (!hasDefaultExportedFunction(source, absPath)) {
-			throw new Error(
-				`[cloudflare-pages-dynamic-ssr] File ${absPath} uses use-dynamic but does not default export a function component.`,
-			);
-		}
-		dynamicFiles.push(absPath);
-	}
-
-	dynamicFiles.sort();
-	return dynamicFiles;
-}
-
-async function writeFileWithParents(
-	path: string,
-	content: string,
-): Promise<void> {
-	mkdirSync(dirname(path), { recursive: true });
-	await Bun.write(path, content);
-}
-
-async function removeGeneratedFiles(filePaths: string[]): Promise<void> {
-	await Promise.all(
-		filePaths.map(async (filePath) => {
-			try {
-				await Bun.file(filePath).delete();
-			} catch {
-				// Ignore missing files from older manifests.
-			}
-		}),
-	);
-}
-
-async function readGeneratedManifest(
-	generatedDir: string,
-): Promise<GeneratedManifest> {
-	const manifestPath = join(generatedDir, GENERATED_MANIFEST_FILE);
-	const manifestFile = Bun.file(manifestPath);
-	if (!(await manifestFile.exists())) {
-		return { files: [] };
-	}
-
-	try {
-		const parsed = JSON.parse(
-			await manifestFile.text(),
-		) as Partial<GeneratedManifest>;
-		return {
-			files: Array.isArray(parsed.files)
-				? parsed.files.filter(
-						(entry): entry is string => typeof entry === "string",
-					)
-				: [],
-		};
-	} catch {
-		return { files: [] };
-	}
-}
-
-async function writeGeneratedManifest(
-	generatedDir: string,
-	manifest: GeneratedManifest,
-): Promise<void> {
-	await writeFileWithParents(
-		join(generatedDir, GENERATED_MANIFEST_FILE),
-		JSON.stringify(manifest, null, 2),
-	);
-}
-
-async function writeRuntimeFiles(generatedDir: string): Promise<void> {
-	const runtimeDir = join(generatedDir, "runtime");
-	await writeFileWithParents(
-		join(runtimeDir, "default-server-adapter.ts"),
-		`export type ServerHydrationAdapterArgs = {
-  pageHtml: string;
-  payloadJson: string;
-  payloadElementId: string;
-  mountSelector: string;
-  clientScriptPath: string;
-};
-
-export default function defaultServerAdapter(args: ServerHydrationAdapterArgs): string {
-  return [
-		\`<div id="\${args.mountSelector.slice(1)}">\${args.pageHtml}</div>\`,
-		\`<script id="\${args.payloadElementId}" type="application/json">\${args.payloadJson}</script>\`,
-		\`<script type="module" src="\${args.clientScriptPath}"></script>\`,
-	].join("");
-}
-`,
-	);
-
-	await writeFileWithParents(
-		join(runtimeDir, "default-client-adapter.ts"),
-		`import { createElement } from "react";
-import { hydrateRoot } from "react-dom/client";
-
-export type ClientHydrationAdapterArgs = {
-  Component: unknown;
-  payload: Record<string, unknown>;
-  mountElement: Element;
-};
-
-export default function defaultClientAdapter(args: ClientHydrationAdapterArgs): void {
-  const component = args.Component as (props: Record<string, unknown>) => unknown;
-  const props = (args.payload.props ?? {}) as Record<string, unknown>;
-  hydrateRoot(args.mountElement, createElement(component, props));
-}
-`,
-	);
-
-	await writeFileWithParents(
-		join(runtimeDir, "server.ts"),
-		`import { createElement } from "react";
-import { renderToString } from "react-dom/server";
-
-type ParseOutputContext = {
-  routePath: string;
-  pathname: string;
-  params: Record<string, unknown>;
-};
-
-type RenderArgs = {
-  context: {
-    request: Request;
-    params?: Record<string, unknown>;
-  };
-  routePath: string;
-  clientScriptPath: string;
-  mountSelector: string;
-  payloadElementId: string;
-  Page: unknown;
-  parseOutput?: (html: string, ctx: ParseOutputContext) => string | Promise<string>;
-  hydrationServerAdapter: (args: {
-    pageHtml: string;
-    payloadJson: string;
-    payloadElementId: string;
-    mountSelector: string;
-    clientScriptPath: string;
-  }) => string;
-};
-
-function escapeJsonForHtml(json: string): string {
-  return json.replace(/</g, "\\\\u003c").replace(/>/g, "\\\\u003e").replace(/&/g, "\\\\u0026");
-}
-
-export async function renderDynamicPage(args: RenderArgs): Promise<Response> {
-  const params = args.context.params ?? {};
-  const pathname = new URL(args.context.request.url).pathname;
-  const page = args.Page as (props: Record<string, unknown>) => unknown;
-
-  const pageHtml = renderToString(createElement(page, { params, pathname }));
-  const payloadJson = escapeJsonForHtml(JSON.stringify({ props: { params, pathname } }));
-
-  const body = args.hydrationServerAdapter({
-    pageHtml,
-    payloadJson,
-    payloadElementId: args.payloadElementId,
-    mountSelector: args.mountSelector,
-    clientScriptPath: args.clientScriptPath,
-  });
-
-	const htmlDoc = '<!doctype html><html><head><meta charset="utf-8" /></head><body>' + body + '</body></html>';
-  const transformed = args.parseOutput
-    ? await args.parseOutput(htmlDoc, {
-        routePath: args.routePath,
-        pathname,
-        params,
-      })
-    : htmlDoc;
-
-  return new Response(transformed, {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-    },
-  });
-}
-`,
-	);
-}
-
-async function transpileFunctionEntries(plans: DynamicRoutePlan[]): Promise<void> {
-	for (const plan of plans) {
-		mkdirSync(dirname(plan.functionOutputPath), { recursive: true });
-		const result = await Bun.build({
-			entrypoints: [plan.functionEntrypoint],
-			outdir: dirname(plan.functionOutputPath),
-			format: "esm",
-			target: "browser",
-			minify: false,
-			sourcemap: "none",
-		});
-
-		if (!result.success) {
-			const messages = result.logs
-				.map((log) => log.message)
-				.filter((message): message is string => typeof message === "string")
-				.join("\n");
-			const details = messages ? `\n${messages}` : "";
-			throw new Error(
-				`[cloudflare-pages-dynamic-ssr] Failed to transpile ${plan.routePath} to ${plan.functionOutputPath}${details}`,
-			);
-		}
-	}
-}
-
-function parseOutputImport(
-	parseOutput: ParseOutputModuleConfig,
-	routeFilePath: string,
-): string {
-	const importPath = makeProjectImportSpecifier(
-		routeFilePath,
-		parseOutput.module,
-	);
-	const exportName = parseOutput.exportName ?? "default";
-	if (exportName === "default") {
-		return `import parseOutput from "${importPath}";`;
-	}
-	return `import { ${exportName} as parseOutput } from "${importPath}";`;
-}
-
-function makeServerAdapterImport(
-	options: ResolvedOptions,
-	routeFilePath: string,
-	runtimeServerAdapterPath: string,
-): string {
-	if (options.hydration.serverAdapterModule) {
-		const importPath = makeProjectImportSpecifier(
-			routeFilePath,
-			options.hydration.serverAdapterModule,
-		);
-		const exportName = options.hydration.serverAdapterExportName ?? "default";
-		if (exportName === "default") {
-			return `import hydrationServerAdapter from "${importPath}";`;
-		}
-		return `import { ${exportName} as hydrationServerAdapter } from "${importPath}";`;
-	}
-
-	const importPath = ensureImportSpecifier(
-		routeFilePath,
-		runtimeServerAdapterPath,
-	);
-	return `import hydrationServerAdapter from "${importPath}";`;
-}
-
-function makeClientAdapterImport(
-	options: ResolvedOptions,
-	clientFilePath: string,
-	runtimeClientAdapterPath: string,
-): string {
-	if (options.hydration.clientAdapterModule) {
-		const importPath = makeProjectImportSpecifier(
-			clientFilePath,
-			options.hydration.clientAdapterModule,
-		);
-		const exportName = options.hydration.clientAdapterExportName ?? "default";
-		if (exportName === "default") {
-			return `import hydrationClientAdapter from "${importPath}";`;
-		}
-		return `import { ${exportName} as hydrationClientAdapter } from "${importPath}";`;
-	}
-
-	const importPath = ensureImportSpecifier(
-		clientFilePath,
-		runtimeClientAdapterPath,
-	);
-	return `import hydrationClientAdapter from "${importPath}";`;
-}
-
-type ResolvedOptions = {
-	basePath: string;
-	generatedDir: string;
-	publicClientPath: string;
-	parseOutput?: ParseOutputModuleConfig;
-	verbose: boolean;
-	hydration: Required<HydrationConfig>;
-};
-
-function resolveOptions(
-	options: CloudflarePagesDynamicSSROptions,
-): ResolvedOptions {
-	return {
-		basePath: options.basePath ?? "pages",
-		generatedDir: options.generatedDir ?? DEFAULT_GENERATED_DIR,
-		publicClientPath: options.publicClientPath ?? DEFAULT_PUBLIC_CLIENT_PATH,
-		parseOutput: options.parseOutput,
-		verbose: options.verbose ?? false,
-		hydration: {
-			mountSelector: options.hydration?.mountSelector ?? DEFAULT_MOUNT_SELECTOR,
-			payloadElementId:
-				options.hydration?.payloadElementId ?? DEFAULT_PAYLOAD_ELEMENT_ID,
-			serverAdapterModule: options.hydration?.serverAdapterModule ?? "",
-			serverAdapterExportName:
-				options.hydration?.serverAdapterExportName ?? "default",
-			clientAdapterModule: options.hydration?.clientAdapterModule ?? "",
-			clientAdapterExportName:
-				options.hydration?.clientAdapterExportName ?? "default",
-		},
+	/**
+	 * Wrangler dev server config. from **`frame-master-plugin-cloudflare-pages-functions-action`**
+	 */
+	wrangler: {
+		port: number | string;
 	};
-}
-
-async function generateArtifacts(
-	resolvedOptions: ResolvedOptions,
-): Promise<GenerationState> {
-	const cwd = process.cwd();
-	const baseDir = resolve(cwd, resolvedOptions.basePath);
-	const generatedDir = resolve(cwd, resolvedOptions.generatedDir);
-	const functionsDir = resolve(cwd, "functions");
-	const previousManifest = await readGeneratedManifest(generatedDir);
-	await removeGeneratedFiles(previousManifest.files);
-
-	rmSync(generatedDir, { recursive: true, force: true });
-	mkdirSync(generatedDir, { recursive: true });
-	mkdirSync(functionsDir, { recursive: true });
-
-	await writeRuntimeFiles(generatedDir);
-
-	const files = await discoverDynamicPages(baseDir);
-	const plans: DynamicRoutePlan[] = [];
-	const clientEntrypoints: string[] = [];
-	const generatedFiles: string[] = [];
-
-	for (const filePath of files) {
-		const routePath = makeRoutePath(baseDir, filePath);
-		const routeKey = routeToKey(routePath);
-		const functionFile = join(
-			generatedDir,
-			"functions-src",
-			routeToEntryFile(routePath),
-		);
-		const functionOutputPath = join(functionsDir, routeToOutputFile(routePath));
-		const clientFile = join(generatedDir, "client", `${routeKey}.ts`);
-		const clientPublicPath = `${resolvedOptions.publicClientPath}/${routeKey}.js`;
-
-		plans.push({
-			filePath,
-			routePath,
-			functionEntrypoint: functionFile,
-			functionOutputPath,
-			clientEntrypoint: clientFile,
-			clientPublicPath,
-			routeKey,
-		});
-
-		clientEntrypoints.push(clientFile);
-		generatedFiles.push(functionFile, functionOutputPath, clientFile);
-
-		const runtimeServerPath = join(generatedDir, "runtime", "server.ts");
-		const runtimeDefaultServerAdapterPath = join(
-			generatedDir,
-			"runtime",
-			"default-server-adapter.ts",
-		);
-		const pageImportPath = ensureImportSpecifier(functionFile, filePath);
-
-		const parseOutputImportLine = resolvedOptions.parseOutput
-			? `${parseOutputImport(resolvedOptions.parseOutput, functionFile)}\n`
-			: "";
-
-		const serverAdapterImportLine = makeServerAdapterImport(
-			resolvedOptions,
-			functionFile,
-			runtimeDefaultServerAdapterPath,
-		);
-
-		await writeFileWithParents(
-			functionFile,
-			`import Page from "${pageImportPath}";
-import { renderDynamicPage } from "${ensureImportSpecifier(functionFile, runtimeServerPath)}";
-${serverAdapterImportLine}
-${parseOutputImportLine}export const onRequest = (context: { request: Request; params?: Record<string, unknown> }) => {
-  return renderDynamicPage({
-    context,
-    routePath: ${JSON.stringify(routePath)},
-    clientScriptPath: ${JSON.stringify(clientPublicPath)},
-    mountSelector: ${JSON.stringify(resolvedOptions.hydration.mountSelector)},
-    payloadElementId: ${JSON.stringify(resolvedOptions.hydration.payloadElementId)},
-    Page,
-    hydrationServerAdapter,
-${resolvedOptions.parseOutput ? "    parseOutput,\n" : ""}  });
 };
-`,
-		);
 
-		const runtimeDefaultClientAdapterPath = join(
-			generatedDir,
-			"runtime",
-			"default-client-adapter.ts",
-		);
-		const clientAdapterImport = makeClientAdapterImport(
-			resolvedOptions,
-			clientFile,
-			runtimeDefaultClientAdapterPath,
-		);
+const cwd = process.cwd();
 
-		await writeFileWithParents(
-			clientFile,
-			`import Page from "${ensureImportSpecifier(clientFile, filePath)}";
-${clientAdapterImport}
+type WranglerConfig = {
+	kv_namespaces?: {
+		binding: string;
+		id: string;
+	}[];
+};
 
-const payloadNode = document.getElementById(${JSON.stringify(
-				resolvedOptions.hydration.payloadElementId,
-			)});
-const mountElement = document.querySelector(${JSON.stringify(
-				resolvedOptions.hydration.mountSelector,
-			)});
-
-if (payloadNode && mountElement) {
-  const payload = JSON.parse(payloadNode.textContent || "{}");
-  hydrationClientAdapter({
-    Component: Page,
-    payload,
-    mountElement,
-  });
+async function getWranglerFile() {
+	const wranglerFile = Bun.file(join(cwd, "wrangler.json"));
+	if (await wranglerFile.exists()) {
+		return wranglerFile.json() as Promise<WranglerConfig>;
+	}
+	const wranglerJsonC = Bun.file(join(cwd, "wrangler.jsonc"));
+	if (await wranglerJsonC.exists()) {
+		return wranglerJsonC.json() as Promise<WranglerConfig>;
+	}
+	throw new Error(
+		"wrangler.json or wrangler.jsonc not found in the project root. Please make sure you have a wrangler.json or wrangler.jsonc file in your project root.",
+	);
 }
-`,
-		);
+
+async function checkConfig() {
+	if (process.env.NODE_ENV !== "development") {
+		return;
 	}
 
-	generatedFiles.push(
-		join(generatedDir, "runtime", "server.ts"),
-		join(generatedDir, "runtime", "default-server-adapter.ts"),
-		join(generatedDir, "runtime", "default-client-adapter.ts"),
-	);
-	await writeGeneratedManifest(generatedDir, { files: generatedFiles });
-
-	return {
-		plans,
-		entrypoints: clientEntrypoints,
-		generatedDir,
-		functionsDir,
-	};
+	const wranglerFile = await getWranglerFile();
+	if (
+		!wranglerFile.kv_namespaces?.some(
+			(namespace) => namespace.binding === "DYNAMIC_PAGE_KV",
+		)
+	) {
+		throw new Error(
+			"KV namespace binding 'DYNAMIC_PAGE_KV' not found in wrangler configuration. Please add a KV namespace with the binding name 'DYNAMIC_PAGE_KV' to your wrangler configuration.",
+		);
+	}
 }
 
 /**
  * cloudflare-pages-dynamic-ssr - Frame-Master Plugin
  */
 export default function cloudflarePagesDynamicSSR(
-	options: CloudflarePagesDynamicSSROptions = {},
+	options: CloudflarePagesDynamicSSROptions,
 ): FrameMasterPlugin {
-	const resolvedOptions = resolveOptions(options);
-	let state: GenerationState = {
-		plans: [],
-		entrypoints: [],
-		generatedDir: resolve(process.cwd(), resolvedOptions.generatedDir),
-		functionsDir: resolve(process.cwd(), "functions"),
-	};
+	const { actionBasePath, basePath = "src/pages" } = options;
+
+	const directive = createDirective(
+		"use-dynamic" as Directives,
+		/^(?:\s*(?:\/\/.*?\n|\s)*)?['"]use[-\s]dynamic['"];?\s*(?:\/\/.*)?(?:\r?\n|$)/m,
+	);
+	if (process.env.__PLUGIN_NODE_ENV__ === "development") {
+		directiveToolSingleton.addDirective(directive.name, directive.regex);
+	}
+
+	const getDynamicFiles = () =>
+		Promise.all(
+			Array.from(
+				new Bun.Glob("**/*.{jsx,tsx}").scanSync({
+					cwd: basePath,
+					onlyFiles: true,
+					absolute: true,
+				}),
+			).map(async (file) =>
+				(await directiveToolSingleton.pathIs(directive.name, file))
+					? file
+					: null,
+			),
+		).then((files) => files.filter((f) => f !== null));
+
+	const buildRoutes = async () =>
+		getGlobalPluginContext("build-unifier")
+			?.getBuilder?.(name)
+			.then(async (builder) => {
+				if (!builder.isBuilding()) {
+					return builder.build();
+				} else return builder.awaitBuildFinish();
+			});
 
 	return {
 		name,
 		version,
-
-		directives: [
-			{
-				name: "use-dynamic",
-				regex: USE_DYNAMIC_REGEX,
-			},
-		],
-
-		build: {
-			buildConfig: async () => {
-				state = await generateArtifacts(resolvedOptions);
-				return {
-					entrypoints: state.entrypoints,
-				};
-			},
-			beforeBuild: async () => {
-				if (state.entrypoints.length === 0) {
-					state = await generateArtifacts(resolvedOptions);
-				}
-			},
-			afterBuild: async () => {
-				await transpileFunctionEntries(state.plans);
-				if (!resolvedOptions.verbose) {
-					return;
-				}
-				console.log(
-					`[cloudflare-pages-dynamic-ssr] Generated ${state.plans.length} dynamic routes in ${state.functionsDir}`,
-				);
+		directives: [directive],
+		priority: -2,
+		requirement: {
+			frameMasterVersion: peerDependencies["frame-master"],
+			bunVersion: ">=1.3.10",
+			frameMasterPlugins: {
+				"frame-master-plugin-cloudflare-pages-functions-action":
+					peerDependencies[
+						"frame-master-plugin-cloudflare-pages-functions-action"
+					],
+				"frame-master-plugin-build-unifier":
+					peerDependencies["frame-master-plugin-build-unifier"],
 			},
 		},
+		async createContext() {
+			await checkConfig();
+			getGlobalPluginContext("build-unifier")?.setBuildConfig?.(name, {
+				buildConfig: async () => {
+					const filePathsList = await getDynamicFiles();
+					const relativeFilePathsList = filePathsList.map((fp) =>
+						relative(join(cwd, basePath), fp),
+					);
+					const pageToActionFilePathList = relativeFilePathsList.map(
+						(relativeFilePath) => join(actionBasePath, relativeFilePath),
+					);
+					/*
+					console.log({
+						relativeFilePathsList,
+						filePathsList,
+						pageToActionFilePathList,
+					});
+					*/
 
-		requirement: {
-			frameMasterVersion: ">=3.1.1",
-			bunVersion: ">=1.3.10",
+					// Mock vaiables for the generated action files
+					const PageModule: {
+						default: () => JSX.Element | Promise<JSX.Element>;
+					} = {
+						default: () => null as unknown as JSX.Element,
+					};
+
+					const onRequestGet: PagesFunction<
+						never,
+						never,
+						RequestContextData
+					> = async (ctx) => {
+						const accept = ctx.request.headers.get("accept") || "";
+						const pathname = new URL(ctx.request.url).pathname;
+						const header = new Headers();
+						let type: "html" | "javascript";
+						if (accept.includes("application/javascript")) {
+							type = "javascript";
+							header.set(
+								"content-type",
+								"application/javascript; charset=utf-8",
+							);
+						} else {
+							header.set("content-type", "text/html; charset=utf-8");
+							type = "html";
+						}
+
+						const storeProvider = ctx.data.storeProvider;
+						const HTMLParser =
+							ctx.data.parser?.html ??
+							((html: string) =>
+								`<html><head></head><body>${html}</body></html>`);
+						const ModuleParser =
+							ctx.data.parser?.module ??
+							((moduleString: string) => moduleString);
+						let storedData = await storeProvider.get(pathname);
+
+						if (!storedData) {
+							storedData = await storeProvider.set(pathname, {
+								default: PageModule.default,
+							});
+						}
+
+						return new Response(
+							type === "javascript"
+								? ModuleParser(storedData.module, PageModule)
+								: HTMLParser(storedData.html),
+							{
+								status: 200,
+								headers: header,
+							},
+						);
+					};
+
+					await Promise.all(
+						pageToActionFilePathList
+							.map((fp) => {
+								const realPath = join(
+									cwd,
+									basePath,
+									relative(actionBasePath, fp),
+								);
+								return {
+									filePath: fp,
+									content: `
+								"no-action";
+								import * as PageModule from "${realPath}";
+								export const onRequest = ${onRequestGet.toString()};
+										`,
+								};
+							})
+							.map(({ filePath, content }) => {
+								return Bun.file(filePath).write(content);
+							}),
+					);
+
+					return {
+						entrypoints: pageToActionFilePathList,
+						minify: process.env.NODE_ENV === "production",
+						target: "browser",
+						splitting: true,
+					};
+				},
+			});
+		},
+		build: {
+			buildConfig: {
+				plugins: [
+					{
+						name: "transform-dynamic-page-module",
+						setup(build) {
+							build.onLoad({ filter: /\.(jsx|tsx)$/ }, async (args) => {
+								const isDynamicModule = await directiveToolSingleton.pathIs(
+									"use-dynamic" as Directives,
+									args.path,
+								);
+
+								if (!isDynamicModule) return;
+
+								return {
+									contents: `
+										import PageComponent from "${relative(join(cwd, basePath), args.path.replace(/\.(jsx|tsx)$/, ""))}";
+										export default PageComponent;
+										`,
+									loader: "js",
+								};
+							});
+						},
+					},
+				],
+			},
+		},
+		async onFileSystemChange(ev, _fp, abs) {
+			console.log(`File system change detected: ${ev} - ${abs}`);
+			if (
+				await directiveToolSingleton.pathIs("use-dynamic" as Directives, abs)
+			) {
+				console.log(
+					`File system change detected in dynamic page file: ${abs}. Rebuilding dynamic pages...`,
+				);
+				await buildRoutes();
+			}
 		},
 	};
 }
-
-export const __internal = {
-	hasUseDynamicDirective,
-	hasDefaultExportedFunction,
-	makeRoutePath,
-	routeToEntryFile,
-	routeToKey,
-};
