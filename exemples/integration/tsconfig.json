@@ -10,7 +10,8 @@
 		"allowJs": true,
 		"types": [
 			"bun",
-			"./worker-configuration.d.ts"
+			"./worker-configuration.d.ts",
+			"frame-master-plugin-cloudflare-pages-dynamic-ssr/types"
 		],
 		"moduleResolution": "bundler",
 		"allowImportingTsExtensions": true,

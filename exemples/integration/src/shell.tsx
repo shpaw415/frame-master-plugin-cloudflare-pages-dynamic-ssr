@@ -1,6 +1,10 @@
 import type { JSX } from "react";
 
-export default function Shell({ children }: { children: JSX.Element }) {
+export default function Shell({
+	children,
+}: {
+	children: JSX.Element | JSX.Element[];
+}) {
 	return (
 		<html lang="en">
 			<head>

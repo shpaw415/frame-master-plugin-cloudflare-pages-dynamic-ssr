@@ -31,28 +31,19 @@ export default {
 		}),
 		...buildUnifier({
 			plugins: [
-				SSRPlugin({
-					actionBasePath: "src/actions",
-					wrangler: {
-						port: WranglerServerPort,
-					},
-				}) as FrameMasterPlugin,
 				CFActionPlugin({
 					actionBasePath: "src/actions",
 					outDir: ".frame-master/build",
 					serverPort: WranglerServerPort,
 				}),
-				{
-					name: "test",
-					version: "0.1.0",
-					async createContext() {
-						getGlobalPluginContext("build-unifier")?.setBuildConfig?.("test", {
-							buildConfig: {
-								throw: true,
-							},
-						});
+				SSRPlugin({
+					actionBasePath: "src/actions",
+					basePath: "src/pages",
+					wrangler: {
+						port: WranglerServerPort,
 					},
-				},
+					entrypointMatcher: [/.*layout\.tsx$/],
+				}) as FrameMasterPlugin,
 			],
 		}),
 		{

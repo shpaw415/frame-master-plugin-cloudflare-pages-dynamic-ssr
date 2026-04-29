@@ -11,5 +11,8 @@
 			"binding": "DYNAMIC_PAGE_KV",
 			"id": "abc"
 		}
+	],
+	"compatibility_flags": [
+		"nodejs_compat"
 	]
 }
