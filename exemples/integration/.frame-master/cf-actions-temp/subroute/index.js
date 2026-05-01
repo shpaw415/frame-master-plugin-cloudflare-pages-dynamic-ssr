@@ -2,12 +2,12 @@ import {
   CtxContext,
   createLoader,
   require_jsx_dev_runtime
-} from "./../chunk-33h8q4es.js";
+} from "./../chunk-mwn6jbk9.js";
 import {
   __export,
   __toESM,
   require_react
-} from "./../chunk-2sdwrsax.js";
+} from "./../chunk-1t823wmt.js";
 
 // src/pages/subroute/index.tsx
 var exports_subroute = {};
@@ -16,7 +16,7 @@ __export(exports_subroute, {
   default: () => Subroute
 });
 
-// ../../src/client/hooks.ts
+// node_modules/frame-master-plugin-cloudflare-pages-dynamic-ssr/src/client/hooks.ts
 var import_react = __toESM(require_react(), 1);
 function useLoader(loader) {
   const ctx = import_react.useContext(CtxContext);
@@ -92,5 +92,5 @@ export {
   onRequest
 };
 
-//# debugId=84D58418A3F58B5764756E2164756E21
+//# debugId=9F03D8A4C5DC0B0664756E2164756E21
 //# sourceMappingURL=./subroute/index.js.map
