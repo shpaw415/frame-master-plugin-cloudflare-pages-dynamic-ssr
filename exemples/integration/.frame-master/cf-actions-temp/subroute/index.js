@@ -21,7 +21,7 @@ var import_react = __toESM(require_react(), 1);
 function useLoader(loader) {
   const ctx = import_react.useContext(CtxContext);
   if (typeof window === "undefined") {
-    return ctx.data.loader.get(loader);
+    return ctx?.data?.loader?.get(loader);
   }
   return loader;
 }
@@ -92,5 +92,5 @@ export {
   onRequest
 };
 
-//# debugId=9F03D8A4C5DC0B0664756E2164756E21
+//# debugId=3CE562F44207C7AC64756E2164756E21
 //# sourceMappingURL=./subroute/index.js.map
