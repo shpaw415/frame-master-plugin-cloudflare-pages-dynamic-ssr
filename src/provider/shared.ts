@@ -27,7 +27,7 @@ export type StoreProvider = {
 	};
 	set: (props: {
 		pathname: string;
-		module: { default: () => JSX.Element | Promise<JSX.Element> };
+		module: { default: () => JSX.Element };
 		parser?: Partial<Parsers>;
 		/**
 		 * Time to live in seconds
@@ -163,7 +163,7 @@ export function createStoreProvider<
 		);
 
 		const pageElement = Wrapper({
-			children: await page(),
+			Children: page,
 			ctx,
 			propsData: LoadersReturnValues,
 		});

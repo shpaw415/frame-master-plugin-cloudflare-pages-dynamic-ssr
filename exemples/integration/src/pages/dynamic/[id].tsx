@@ -1,3 +1,4 @@
+"use dynamic";
 import {
 	createLoader,
 	type PluginEventContext,

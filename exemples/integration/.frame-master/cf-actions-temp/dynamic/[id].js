@@ -10,40 +10,39 @@ import {
   __toESM
 } from "./../chunk-2sdwrsax.js";
 
-// src/pages/subroute/index.tsx
-var exports_subroute = {};
-__export(exports_subroute, {
-  loader_SubRouteServerData: () => loader_SubRouteServerData,
-  default: () => Subroute
+// src/pages/dynamic/[id].tsx
+var exports__id_ = {};
+__export(exports__id_, {
+  loader_idData: () => loader_idData,
+  default: () => Dynamic
 });
 var jsx_dev_runtime = __toESM(require_jsx_dev_runtime(), 1);
-"use-dynamic";
-var loader_SubRouteServerData = createLoader({
-  callback: async () => {
-    return await fetch("https://jsonplaceholder.typicode.com/todos/1").then((res) => res.json());
+"use dynamic";
+var loader_idData = createLoader({
+  async callback(ctx) {
+    return {
+      id: ctx.params.id
+    };
   }
 });
-function Subroute() {
-  const data = useLoader(loader_SubRouteServerData);
+function Dynamic() {
+  const data = useLoader(loader_idData);
   return /* @__PURE__ */ jsx_dev_runtime.jsxDEV("div", {
     children: [
       /* @__PURE__ */ jsx_dev_runtime.jsxDEV("h1", {
-        children: "Subroute"
+        children: "Dynamic page"
       }, undefined, false, undefined, this),
       /* @__PURE__ */ jsx_dev_runtime.jsxDEV("p", {
-        children: "This page is rendered dynamically using the cloudflare-pages-dynamic-ssr plugin."
-      }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("p", {
-        children: "Data fetched from an API test"
-      }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime.jsxDEV("pre", {
-        children: JSON.stringify(data, null, 2)
-      }, undefined, false, undefined, this)
+        children: [
+          "This page is rendered dynamically using the cloudflare-pages-dynamic-ssr plugin. ",
+          JSON.stringify(data, null, 2)
+        ]
+      }, undefined, true, undefined, this)
     ]
   }, undefined, true, undefined, this);
 }
 
-// src/actions/subroute/index.cfdynamicssr
+// src/actions/dynamic/[id].cfdynamicssr
 "no-action";
 var onRequest = async (ctx) => {
   const acceptedTypes = ctx.request.headers.get("accept")?.includes("application/vnd.ssr.props+json") ? "props" : "html", pathname = new URL(ctx.request.url).pathname, header = new Headers;
@@ -54,7 +53,7 @@ var onRequest = async (ctx) => {
       return Response.json(propsData);
     const { props } = await ctx.data.storeProvider.set({
       pathname,
-      module: exports_subroute,
+      module: exports__id_,
       parser: ctx.data.parser,
       ctx
     });
@@ -67,7 +66,7 @@ var onRequest = async (ctx) => {
     storedData = await storeProvider.set({
       pathname,
       module: {
-        default: Subroute
+        default: Dynamic
       },
       parser: ctx.data.parser,
       ctx
@@ -81,5 +80,5 @@ export {
   onRequest
 };
 
-//# debugId=8DF7478187C4687C64756E2164756E21
-//# sourceMappingURL=./subroute/index.js.map
+//# debugId=53C807E480328B3B64756E2164756E21
+//# sourceMappingURL=./dynamic/[id].js.map

@@ -3,11 +3,11 @@ import { CtxContext, type PluginEventContext } from "./";
 import type { PropsData } from "../provider/shared";
 
 export default function Wrapper({
-	children,
+	Children,
 	ctx,
 	propsData,
 }: {
-	children: JSX.Element;
+	Children: () => JSX.Element;
 	ctx: PluginEventContext;
 	propsData: Array<PropsData>;
 }) {
@@ -28,5 +28,9 @@ export default function Wrapper({
 		},
 	};
 
-	return <CtxContext.Provider value={ctx}>{children}</CtxContext.Provider>;
+	return (
+		<CtxContext.Provider value={ctx}>
+			<Children />
+		</CtxContext.Provider>
+	);
 }

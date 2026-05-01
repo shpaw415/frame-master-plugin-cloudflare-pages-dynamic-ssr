@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/client/hooks.ts"],
+  "sourcesContent": [
+    "import { useContext } from \"react\";\nimport {\n\ttype LoaderManager,\n\tCtxContext,\n\ttype PluginEventContext,\n} from \"../server\";\nimport type { LoaderValue } from \"../provider/shared\";\n\nexport function useLoader<Loader extends LoaderManager<T>, T>(\n\tloader: Loader,\n): LoaderValue<ReturnType<Loader[\"props\"][\"callback\"]>> | null {\n\tconst ctx = useContext(CtxContext);\n\n\tif (typeof window === \"undefined\") {\n\t\treturn (ctx as PluginEventContext)?.data?.loader?.get<\n\t\t\tLoader[\"props\"][\"callback\"]\n\t\t>(loader) as unknown as LoaderValue<Loader[\"props\"][\"callback\"]> | null;\n\t}\n\t// the bundler LoaderManager with the data fetcher.\n\treturn loader as unknown as LoaderValue<Loader[\"props\"][\"callback\"]>;\n}\n"
+  ],
+  "mappings": ";;;;;;;;;AAAA;AAQO,SAAS,SAA6C,CAC5D,QAC8D;AAAA,EAC9D,MAAM,MAAM,wBAAW,UAAU;AAAA,EAEjC,IAAI,OAAO,WAAW,aAAa;AAAA,IAClC,OAAQ,KAA4B,MAAM,QAAQ,IAEhD,MAAM;AAAA,EACT;AAAA,EAEA,OAAO;AAAA;",
+  "debugId": "86149928816FD90364756E2164756E21",
+  "names": []
+}
