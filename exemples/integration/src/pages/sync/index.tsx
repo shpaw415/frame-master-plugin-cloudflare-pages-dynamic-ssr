@@ -3,7 +3,7 @@ import { TestComponent } from "../../components/test";
 export default function SyncPage() {
 	return (
 		<section>
-			This is a sync page <TestComponent />
+			This is a sync page <TestComponent /> test
 		</section>
 	);
 }

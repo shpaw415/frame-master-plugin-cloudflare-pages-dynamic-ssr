@@ -1,8 +1,7 @@
-import type {
-	Response as _Response,
-	EventContext,
-} from "@cloudflare/workers-types";
+import type { EventContext } from "@cloudflare/workers-types";
 import type { RequestContextData } from "../shared";
+
+type RequestContextMiddleWare = Omit<RequestContextData, "loader">;
 
 /**
  * Creates a middleware function that initializes the store provider in the request context. This middleware should be used at the same level as the provider to ensure that the store provider is available in the request context for the request handlers to interact with.
@@ -13,10 +12,10 @@ import type { RequestContextData } from "../shared";
 export function createMiddleware<MyEnv = unknown>(
 	providerInit: (
 		context: EventContext<MyEnv, never, RequestContextData>,
-	) => RequestContextData | Promise<RequestContextData>,
+	) => RequestContextMiddleWare | Promise<RequestContextMiddleWare>,
 ) {
 	return async (context: EventContext<MyEnv, never, RequestContextData>) => {
-		context.data = await providerInit(context);
+		context.data = (await providerInit(context)) as RequestContextData;
 		return await context.next();
 	};
 }

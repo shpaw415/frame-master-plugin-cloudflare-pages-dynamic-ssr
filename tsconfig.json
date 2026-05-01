@@ -2,7 +2,8 @@
 	"compilerOptions": {
 		// Environment setup & latest features
 		"lib": [
-			"ESNext"
+			"ESNext",
+			"DOM"
 		],
 		"target": "ESNext",
 		"module": "Preserve",
@@ -10,7 +11,9 @@
 		"jsx": "react-jsx",
 		"allowJs": true,
 		"types": [
-			"bun"
+			"bun",
+			"./types.d.ts",
+			"@cloudflare/workers-types"
 		],
 		// Bundler mode
 		"moduleResolution": "bundler",
@@ -26,6 +29,10 @@
 		// Some stricter flags (disabled by default)
 		"noUnusedLocals": false,
 		"noUnusedParameters": false,
-		"noPropertyAccessFromIndexSignature": false
-	}
+		"noPropertyAccessFromIndexSignature": false,
+	},
+	"exclude": [
+		"exemples",
+		"node_modules"
+	]
 }
