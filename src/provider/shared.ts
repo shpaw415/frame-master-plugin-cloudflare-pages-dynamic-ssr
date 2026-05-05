@@ -1,7 +1,8 @@
+import type { HTMLRewriter, Response } from "@cloudflare/workers-types";
 import type { JSX } from "react";
-import Wrapper from "../server/wrapper";
 import type { PluginEventContext } from "../server";
 import { LoaderManager } from "../server";
+import Wrapper from "../server/wrapper";
 
 export type LoaderValue<T> = Awaited<
 	ReturnType<LoaderManager<T>["props"]["callback"]>
@@ -157,24 +158,51 @@ export function createStoreProvider<
 				Object.entries(module).filter(
 					([, exp]) => exp instanceof LoaderManager,
 				) as unknown as Array<[string, LoaderManager<unknown>]>
-			).map(([name, loader]) =>
-				loader.props.callback(ctx).then((data) => ({ name, data, pathname })),
+			).map(([_name, loader]) =>
+				loader.props
+					.callback(ctx)
+					.then((data) => ({ name: loader.props.name, data, pathname })),
 			),
 		);
 
+		const expiresAt = Date.now() + (ttl ?? 60 * 60 * 24) * 1000; // default TTL of 1 day
+
+		//@ts-expect-error
+		const rewriter = new HTMLRewriter().on("head", {
+			element(element) {
+				element.append(
+					`<script id="__PROVIDER_PROPS__">window.__PROVIDER_PROPS__ = ${JSON.stringify(LoadersReturnValues)}</script>`,
+					{
+						html: true,
+					},
+				);
+				element.append(
+					`<script id="__PROVIDER_EXPIRES_AT__">window.__PROVIDER_EXPIRES_AT__ = ${expiresAt}</script>`,
+					{
+						html: true,
+					},
+				);
+			},
+		});
 		const pageElement = Wrapper({
 			Children: page,
 			ctx,
 			propsData: LoadersReturnValues,
+			pathname: new URL(ctx.request.url).pathname,
 		});
-
 		const { renderToString } = await import("react-dom/server");
-
-		const expiresAt = Date.now() + (ttl ?? 60 * 60 * 24) * 1000; // default TTL of 1 day
+		const pageHTML = renderToString(
+			parser?.jsx?.(pathname, pageElement) ?? pageElement,
+		);
 
 		const dataToStore: StoreType = {
 			pathname,
-			data: renderToString(parser?.jsx?.(pathname, pageElement) ?? pageElement),
+			data: await rewriter
+				.transform(
+					//@ts-expect-error
+					new Response(pageHTML),
+				)
+				.text(),
 			expiresAt,
 		};
 		const propsDataToStore: StoreType = {

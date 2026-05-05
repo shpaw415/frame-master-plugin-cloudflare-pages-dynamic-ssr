@@ -1,5 +1,5 @@
-import type { JSX } from "react";
 import CustomEntryPoints from "dynamic-ssr:entrypoints";
+import type { JSX } from "react";
 
 export const NextJsStyleLayoutSetup = {
 	/**

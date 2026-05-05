@@ -1,20 +1,19 @@
-import { join, relative, extname } from "node:path";
 import { watch } from "node:fs";
+import { extname, join, relative } from "node:path";
 import {
 	type Directives,
 	type FrameMasterPlugin,
 	getGlobalPluginContext,
 } from "frame-master/plugin";
-import { isDev } from "frame-master/utils";
 import {
 	createDirective,
 	directiveToolSingleton,
 } from "frame-master/plugin/utils";
-import { name, version, peerDependencies } from "./package.json";
+import { name, peerDependencies, version } from "./package.json";
 import type { RequestContextData } from "./src/provider/shared";
 import "frame-master-plugin-build-unifier";
 import type { JSX } from "react";
-import type { LoaderManager, PluginEventContext } from "./src/server";
+import type { LoaderManager, PageConfigManager } from "./src/server";
 
 declare module "frame-master/plugin/utils" {
 	interface CustomDirectives {
@@ -162,19 +161,13 @@ export default function cloudflarePagesDynamicSSR(
 						(relativeFilePath) => join(actionBasePath, relativeFilePath),
 					);
 
-					/*console.log({
-						relativeFilePathsList,
-						filePathsList,
-						pageToActionFilePathList,
-					});*/
-
 					// Mock vaiables for the generated action files
 					const PageModule = {
 						default: () => null as unknown as JSX.Element,
 					} as unknown as {
-						//@ts-expect-error
 						default: () => JSX.Element;
-						[key: string]: LoaderManager<unknown>;
+						ssr_configs?: PageConfigManager;
+						[key: `loader_${string}`]: LoaderManager<unknown>;
 					};
 
 					const onRequestGet: PagesFunction<
@@ -189,6 +182,9 @@ export default function cloudflarePagesDynamicSSR(
 							: "html";
 						const pathname = new URL(ctx.request.url).pathname;
 						const header = new Headers();
+
+						const pageConfigs = PageModule.ssr_configs?.getConfigs(ctx);
+
 						if (acceptedTypes === "props") {
 							header.set(
 								"content-type",
@@ -204,12 +200,12 @@ export default function cloudflarePagesDynamicSSR(
 								module: PageModule,
 								parser: ctx.data.parser,
 								ctx,
+								ttl: pageConfigs?.ttl ?? 86400,
 							});
 							return Response.json(props);
-						} else {
-							header.set("content-type", "text/html; charset=utf-8");
 						}
 
+						header.set("content-type", "text/html; charset=utf-8");
 						const storeProvider = ctx.data.storeProvider;
 
 						let storedData =
@@ -221,16 +217,15 @@ export default function cloudflarePagesDynamicSSR(
 							storedData = await storeProvider
 								.set({
 									pathname,
-									module: {
-										default: PageModule.default,
-									},
+									module: PageModule,
 									parser: ctx.data.parser,
 									ctx,
+									ttl: pageConfigs?.ttl ?? 86400,
 								})
 								.then(({ html }) => html);
 						}
 
-						return new Response(storedData?.data, {
+						return new Response(storedData?.data as string, {
 							status: 200,
 							headers: header,
 						});
@@ -249,7 +244,7 @@ export default function cloudflarePagesDynamicSSR(
 								"no-action";
 								import * as PageModule from "${realPath}";
 								export const onRequest = ${onRequestGet.toString()};
-										`,
+								`,
 							};
 						}),
 					);
@@ -346,11 +341,13 @@ export default function cloudflarePagesDynamicSSR(
 						setup(build) {
 							const createTranspiler = (
 								replace: Record<string, string>,
+								eliminate: string[],
 								autoImportJSX: boolean,
 							) =>
 								new Bun.Transpiler({
 									exports: {
 										replace,
+										eliminate,
 									},
 									deadCodeElimination: false,
 									treeShaking: false,
@@ -385,6 +382,7 @@ export default function cloudflarePagesDynamicSSR(
 											`__$${loader}`,
 										]),
 									),
+									["ssr_configs"],
 									!moduleLoaderData.imports.find((imp) => imp.path === "react"),
 								).transformSync(
 									contents,
@@ -402,16 +400,10 @@ export default function cloudflarePagesDynamicSSR(
 								for (const loader_name of moduleLoaderLoaderExports) {
 									transpiled = transpiled.replaceAll(
 										`"__$${loader_name}"`,
-										`await fetch(
-											"/${relativePathname}", 
-											{ 
-												headers: { 
-											 		"Accept": "application/vnd.ssr.props+json" 
-												} 
-											})
-											.then(res => res.json())
-											.then(({ data }) => data.find(i => i.name === "${loader_name}")?.data)
-											`,
+										JSON.stringify({
+											name: loader_name.replace(/^loader_/, ""),
+											pathname: relativePathname,
+										}),
 									);
 								}
 

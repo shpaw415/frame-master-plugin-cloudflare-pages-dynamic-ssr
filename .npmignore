@@ -1,0 +1,12 @@
+.env
+.gitignore
+CONFIG_EXAMPLE.md
+bunfig.toml
+bun.lock
+frame-master.config.ts
+.frame-master
+.wrangler
+exemples
+functions
+worker-configuration.d.ts
+wrangler.jsonc

@@ -15,7 +15,11 @@ export function createMiddleware<MyEnv = unknown>(
 	) => RequestContextMiddleWare | Promise<RequestContextMiddleWare>,
 ) {
 	return async (context: EventContext<MyEnv, never, RequestContextData>) => {
-		context.data = (await providerInit(context)) as RequestContextData;
+		context.data = {
+			...context.data,
+			...((await providerInit(context)) as RequestContextData),
+		};
+
 		return await context.next();
 	};
 }

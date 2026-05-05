@@ -1,38 +1,25 @@
 {
 	"compilerOptions": {
-		// Environment setup & latest features
-		"lib": [
-			"ESNext",
-			"DOM"
-		],
+		"lib": ["ESNext", "DOM"],
 		"target": "ESNext",
 		"module": "Preserve",
 		"moduleDetection": "force",
 		"jsx": "react-jsx",
 		"allowJs": true,
-		"types": [
-			"bun",
-			"./types.d.ts",
-			"@cloudflare/workers-types"
-		],
-		// Bundler mode
+		"types": ["bun", "./types.d.ts"],
 		"moduleResolution": "bundler",
 		"allowImportingTsExtensions": true,
 		"verbatimModuleSyntax": true,
 		"noEmit": true,
-		// Best practices
 		"strict": true,
 		"skipLibCheck": true,
 		"noFallthroughCasesInSwitch": true,
 		"noUncheckedIndexedAccess": true,
 		"noImplicitOverride": true,
-		// Some stricter flags (disabled by default)
 		"noUnusedLocals": false,
 		"noUnusedParameters": false,
-		"noPropertyAccessFromIndexSignature": false,
+		"noPropertyAccessFromIndexSignature": false
 	},
-	"exclude": [
-		"exemples",
-		"node_modules"
-	]
+	"exclude": ["node_modules"],
+	"include": ["**/*", ".frame-master/frame-master-custom-type.d.ts"]
 }

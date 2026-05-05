@@ -1,21 +1,27 @@
 import { useContext } from "react";
+import type { LoaderValue } from "../provider/shared";
 import {
-	type LoaderManager,
 	CtxContext,
+	type LoaderManager,
 	type PluginEventContext,
 } from "../server";
-import type { LoaderValue } from "../provider/shared";
+import { PropsContext } from "./context";
 
 export function useLoader<Loader extends LoaderManager<T>, T>(
 	loader: Loader,
 ): LoaderValue<ReturnType<Loader["props"]["callback"]>> | null {
 	const ctx = useContext(CtxContext);
+	const props = useContext(PropsContext);
 
 	if (typeof window === "undefined") {
-		return (ctx as PluginEventContext)?.data?.loader?.get<
-			Loader["props"]["callback"]
-		>(loader) as unknown as LoaderValue<Loader["props"]["callback"]> | null;
+		return (ctx as PluginEventContext)?.data?.loader?.get(loader) as never;
 	}
+
 	// the bundler LoaderManager with the data fetcher.
-	return loader as unknown as LoaderValue<Loader["props"]["callback"]>;
+	return props?.find((prop) => prop.name === loader.name)?.data as never;
+}
+
+export function useRequestContext<Env, P extends string, Data>() {
+	const ctx = useContext(CtxContext);
+	return ctx as PluginEventContext<Env, P, Data>;
 }

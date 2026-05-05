@@ -3,13 +3,9 @@ import type { RequestContextData } from "../provider/shared";
 
 export type LoaderProps<T> = {
 	/**
-	 * Optional name for the loader. If not provided, the name of the variable will be used as the loader name.
+	 * name for the loader. must be unique across the application. This name will be used to identify the loader in the context and to fetch the data for the component using the useLoader hook.
 	 */
-	name?: string;
-	/**
-	 * *Internal*
-	 */
-	pathname?: string;
+	name: string;
 	/**
 	 * Callback function that will be called on the server to fetch data for the loader. It receives the event context as a parameter and should return a promise that resolves to the data to be passed to the component. The data returned by this function will be stored in the context and can be accessed by the component using the useLoader hook.
 	 */
@@ -18,15 +14,43 @@ export type LoaderProps<T> = {
 
 export class LoaderManager<T> {
 	public props: LoaderProps<T>;
-	public name?: string;
-	public pathname?: string;
+	public name: string;
 	constructor(props: LoaderProps<T>) {
 		this.props = props;
 		this.name = props.name;
-		this.pathname = props.pathname;
 	}
 }
 
+/**
+ * Defines a server-side data loader for a dynamic page.
+ *
+ * The loader `callback` runs exclusively on the server. At build time the plugin
+ * strips the callback from the client bundle and replaces the export with a
+ * lightweight metadata object `{ name, pathname }` so no server code is ever
+ * shipped to the browser.
+ *
+ * The variable **must** be exported and its name **must** start with `loader_`
+ * so the plugin can discover it automatically.
+ *
+ * @param props - Loader configuration.
+ * @param props.name - Unique identifier for this loader within the page file.
+ *   Used by `useLoader()` to look up the result.
+ * @param props.callback - Async function executed server-side that returns the
+ *   data to be made available via `useLoader()`. Receives the full
+ *   `PluginEventContext` (route params, env bindings, request, etc.).
+ * @returns A `LoaderManager<T>` instance. Pass the exported variable directly
+ *   to `useLoader()`.
+ *
+ * @example
+ * ```typescript
+ * export const loader_user = createLoader({
+ *   name: "user",
+ *   async callback(ctx: PluginEventContext<Env, "id", unknown>) {
+ *     return fetchUser(ctx.params.id, ctx.env.DB);
+ *   },
+ * });
+ * ```
+ */
 export function createLoader<T>(
 	props: Omit<LoaderProps<T>, "pathname">,
 ): LoaderManager<T> {
@@ -39,5 +63,56 @@ export type PluginEventContext<
 	Data = unknown,
 > = EventContext<{ NODE_ENV: string } & Env, Params, RequestContextData & Data>;
 
-//export const ServerLoaderContext = createContext();
 export const CtxContext = createContext<PluginEventContext | null>(null);
+
+// Page config Section ----------------------------------------------------
+export type SSRPageConfigProps = {
+	callback: (ctx: PluginEventContext) => {
+		ttl?: number;
+	};
+};
+
+export type SSRPageConfig = {
+	ttl?: number;
+};
+
+export class PageConfigManager {
+	public configs: SSRPageConfigProps;
+	constructor(config: SSRPageConfigProps) {
+		this.configs = config;
+	}
+	getConfigs(ctx: PluginEventContext) {
+		return this.configs.callback(ctx);
+	}
+}
+
+/**
+ * Configures server-side caching behaviour for a dynamic page.
+ *
+ * The export **must** be named exactly `ssr_configs`. The plugin reads this
+ * export at request time to determine the TTL before storing the rendered HTML
+ * and loader props in the cache.
+ *
+ * @param config - Page configuration.
+ * @param config.callback - Function called on every cache-miss request that
+ *   returns the cache settings for the current page. Receives the full
+ *   `PluginEventContext` so settings can vary per request (e.g. based on
+ *   route params or env).
+ * @param config.callback.return.ttl - Time-to-live in **seconds** for both the
+ *   rendered HTML and the loader props. Defaults to `86400` (24 hours) when
+ *   omitted.
+ * @returns A `PageConfigManager` instance consumed internally by the generated
+ *   request handler.
+ *
+ * @example
+ * ```typescript
+ * export const ssr_configs = createPageConfig({
+ *   callback(ctx) {
+ *     return { ttl: 60 }; // cache this page for 60 seconds
+ *   },
+ * });
+ * ```
+ */
+export function createPageConfig(config: SSRPageConfigProps) {
+	return new PageConfigManager(config);
+}
