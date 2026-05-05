@@ -160,7 +160,7 @@ A dynamic page file may export three things:
 
 ## Complete Page Example
 
-```typescript
+```tsx
 // src/pages/dynamic/[id].tsx
 "use dynamic";
 
@@ -186,26 +186,29 @@ export const loader_idData = createLoader({
   },
 });
 
+export default function DynamicPage() {
+  const idData = useLoader(loader_idData);
+  return (
+    <div>
+      <h1>Dynamic page — id: {idData?.id}</h1>
+      <TodosList />
+    </div>
+  );
+}
+
 // Additional loader — fetch from an external API
 export const loader_todo = createLoader({
   name: "todo",
   async callback() {
     return fetch("https://jsonplaceholder.typicode.com/todos/1").then((r) =>
-      r.json()
+      r.json(),
     );
   },
 });
 
-export default function DynamicPage() {
-  const idData = useLoader(loader_idData);
+function TodosList() {
   const todo = useLoader(loader_todo);
-
-  return (
-    <div>
-      <h1>Dynamic page — id: {idData?.id}</h1>
-      <pre>{JSON.stringify(todo, null, 2)}</pre>
-    </div>
-  );
+  return <pre>{JSON.stringify(todo, null, 2)}</pre>;
 }
 ```
 
@@ -358,7 +361,7 @@ The callback receives the `EventContext` and must return:
 Persistent key-value storage. Survives across deployments and worker restarts.
 
 ```ts
-import KVProvider from "frame-master-plugin-cloudflare-pages-dynamic-ssr/provider/stores/cloudflareKV";
+import KVProvider from "frame-master-plugin-cloudflare-pages-dynamic-ssr/provider/store/kv";
 
 storeProvider: KVProvider({
   binding: ctx.env.MY_KV, // KVNamespace binding from wrangler.jsonc
@@ -381,7 +384,7 @@ Requires a `kv_namespaces` entry in `wrangler.jsonc`:
 Uses Cloudflare's built-in edge cache. No KV binding required, but entries may be evicted at any time.
 
 ```typescript
-import CacheProvider from "frame-master-plugin-cloudflare-pages-dynamic-ssr/provider/stores/cloudflareCache";
+import CacheProvider from "frame-master-plugin-cloudflare-pages-dynamic-ssr/provider/store/cache";
 
 storeProvider: CacheProvider;
 ```
@@ -506,6 +509,8 @@ export const onRequest = createMiddleware<Env>((ctx) => ({
 ```
 
 `NextJsStyleLayoutSetup.PageWrapper` walks up the path hierarchy, finds every `layout.tsx` ancestor, and wraps the page element from outermost to innermost — matching the behaviour of Next.js App Router layouts.
+
+> _entrypointMatcher_ must includes the `layouts` path/regex
 
 For `pathname = "/subroute/index"` the render tree becomes:
 
