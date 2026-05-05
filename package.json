@@ -32,7 +32,7 @@
 		"./utils/*": "./src/utils/*",
 		"./types": "./types.d.ts",
 		"./client/hooks": "./src/client/hooks.ts",
-		"./client/context": "./src/client/context.ts",
+		"./client/context": "./src/client/context.tsx",
 		"./server": "./src/server/index.ts",
 		"./revalidate": "./src/utils/revalidate.ts"
 	},
