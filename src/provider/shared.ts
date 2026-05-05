@@ -84,28 +84,6 @@ export function fromStore<T extends StoreType>(storeString: string): T {
 	return JSON.parse(storeString) as T;
 }
 
-export function createServerProvider<
-	get extends FuncType,
-	post extends FuncType,
-	del extends FuncType,
->(params: ServerProviderProps<get, post, del>) {
-	return {
-		storeProvider: params.storeProvider,
-		routeModule: params.routeModule,
-		requestHandler: {
-			onGetRequest: params.requestHandler.onGetRequest({
-				storeProvider: params.storeProvider,
-			}),
-			onPostRequest: params.requestHandler.onPostRequest({
-				storeProvider: params.storeProvider,
-			}),
-			onDeleteRequest: params.requestHandler.onDeleteRequest({
-				storeProvider: params.storeProvider,
-			}),
-		},
-	};
-}
-
 export function createStoreProvider<
 	Ctx extends Record<string, unknown>,
 >(params: {

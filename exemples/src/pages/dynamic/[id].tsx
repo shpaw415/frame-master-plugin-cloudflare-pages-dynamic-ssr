@@ -19,6 +19,7 @@ export const loader_idData = createLoader({
 	async callback(ctx: PluginEventContext<unknown, "id", unknown>) {
 		return {
 			id: ctx.params.id,
+			time: Date.now(),
 		};
 	},
 });

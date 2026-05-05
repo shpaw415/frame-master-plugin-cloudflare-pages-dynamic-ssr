@@ -15,6 +15,11 @@ export const PropsContext = globalThis.__PROPS_CONTEXT__;
 
 export type SSRPropsProviderProps = {
 	pathname: string;
+	/**
+	 * return true if the pathname is a dynamic path
+	 * false otherwise
+	 */
+	fetchCallback: (pathname: string, dynamicEndpoints: string[]) => boolean;
 	children: React.ReactNode;
 	/**
 	 * A ref to store the promise of the current route change, so that it can be awaited.
@@ -33,8 +38,10 @@ export function SSRPropsProvider({
 	children,
 	promiseRef,
 	devKey,
+	fetchCallback,
 }: SSRPropsProviderProps) {
-	const firstLoadPathnameRef = useRef(pathname);
+	const firstLoadPathnameRef = useRef<string | null>(pathname);
+
 	const [props, setProps] = useState<Array<PropsData> | null>(() => {
 		const propsScript = document.getElementById("__PROVIDER_PROPS__");
 		if (propsScript) {
@@ -63,16 +70,25 @@ export function SSRPropsProvider({
 			if (promiseRef) {
 				promiseRef.current = fetchPromise;
 			}
+			return fetchPromise;
 		},
 		[promiseRef],
 	);
 
 	useEffect(() => {
 		devKey; // include devKey in the dependency array to refetch props when it changes
-		if (pathname !== firstLoadPathnameRef.current) {
+		if (
+			pathname !== firstLoadPathnameRef.current &&
+			fetchCallback(
+				pathname,
+				require("@dynamic-ssr-endpoints.js").default as string[],
+			)
+		) {
 			fetchProps(pathname);
+		} else {
+			firstLoadPathnameRef.current = null;
 		}
-	}, [pathname, fetchProps, devKey]);
+	}, [pathname, fetchProps, devKey, fetchCallback]);
 
 	return (
 		<PropsContext.Provider value={props}>{children}</PropsContext.Provider>

@@ -1,5 +1,5 @@
 import { watch } from "node:fs";
-import { extname, join, relative } from "node:path";
+import { extname, join, relative, normalize } from "node:path";
 import {
 	type Directives,
 	type FrameMasterPlugin,
@@ -131,6 +131,22 @@ export default function cloudflarePagesDynamicSSR(
 				} else return builder.awaitBuildFinish();
 			});
 
+	const getExtLess = async () => {
+		const filePathsList = await getDynamicFiles();
+		const relativeFilePathsList = filePathsList.map((fp) =>
+			relative(join(cwd, basePath), fp),
+		);
+		const extless_relative_fp = relativeFilePathsList
+			.map((fp) => fp.slice(0, -extname(fp).length))
+			.map((endpoint) =>
+				endpoint.endsWith("index")
+					? endpoint.slice(0, -"/index".length)
+					: endpoint,
+			)
+			.map((endpoint) => `/${endpoint}`);
+		return extless_relative_fp;
+	};
+
 	let isDynamicModuleBuild = false;
 
 	return {
@@ -209,7 +225,7 @@ export default function cloudflarePagesDynamicSSR(
 						const storeProvider = ctx.data.storeProvider;
 
 						let storedData =
-							ctx.env.NODE_ENV === "development"
+							process.env.NODE_ENV === "development"
 								? null
 								: await storeProvider.get.page(pathname);
 
@@ -276,6 +292,9 @@ export default function cloudflarePagesDynamicSSR(
 							};
 							export default customEntrypoints;
 							`,
+							"@dynamic-ssr-endpoints.js": `
+							const endpoints = ${JSON.stringify(await getExtLess())}; 
+							export default endpoints;`,
 						},
 						target: "browser",
 						loader: {
@@ -334,7 +353,13 @@ export default function cloudflarePagesDynamicSSR(
 				});
 				await Bun.sleep(1000);
 			},
-			buildConfig: {
+			buildConfig: async () => ({
+				entrypoints: ["@dynamic-ssr-endpoints.js"],
+				files: {
+					"@dynamic-ssr-endpoints.js": `
+					const endpoints = ${JSON.stringify(await getExtLess())}; 
+					export default endpoints;`,
+				},
 				plugins: [
 					{
 						name: "transform-dynamic-page-module",
@@ -357,6 +382,7 @@ export default function cloudflarePagesDynamicSSR(
 								});
 
 							const scanner = new Bun.Transpiler({ loader: "tsx" });
+
 							build.onLoad({ filter: /\.(jsx|tsx)$/ }, async (args) => {
 								const isDynamicModule = await directiveToolSingleton.pathIs(
 									"use-dynamic" as Directives,
@@ -415,7 +441,7 @@ export default function cloudflarePagesDynamicSSR(
 						},
 					},
 				],
-			},
+			}),
 		},
 		async onFileSystemChange(_ev, _fp, abs) {
 			directiveToolSingleton.clearPaths();

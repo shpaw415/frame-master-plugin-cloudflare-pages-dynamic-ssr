@@ -14,18 +14,6 @@ export default {
 		port: 3000,
 	},
 	plugins: [
-		ApplyReact({
-			route: "exemples/src/pages",
-			clientShellPath: "exemples/src/client-shell.tsx",
-			entrypointExtensions: [".tsx"],
-			style: "nextjs",
-		}),
-		ReactToHTML({
-			verbose: false,
-			srcDir: "exemples/src/pages",
-			shellPath: "exemples/src/shell.tsx",
-			asyncFallback: AsyncFallback,
-		}),
 		...buildUnifier({
 			plugins: [
 				CFActionPlugin({
@@ -43,6 +31,19 @@ export default {
 				}),
 			],
 		}),
+		ApplyReact({
+			route: "exemples/src/pages",
+			clientShellPath: "exemples/src/client-shell.tsx",
+			entrypointExtensions: [".tsx"],
+			style: "nextjs",
+		}),
+		ReactToHTML({
+			verbose: false,
+			srcDir: "exemples/src/pages",
+			shellPath: "exemples/src/shell.tsx",
+			asyncFallback: AsyncFallback,
+		}),
+
 		{
 			name: "proxy-to-wrangler",
 			version: "0.1.0",
