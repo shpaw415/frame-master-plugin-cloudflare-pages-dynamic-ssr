@@ -20,7 +20,13 @@ export default function Wrapper({
 			);
 			if (!prop) {
 				throw new Error(
-					`Loader with name ${manager.name} not found for pathname ${pathname}`,
+					[
+						"Oups! This error may occur for these cases:",
+						"1. The loader is not exported.",
+						"2. The loader variable name does not starts with loader_.",
+						"3. The loader is not in the same file as the component that uses it.",
+						'4. The current file does not use the "use dynamic" directive, which is required to use the loader.',
+					].join("\n"),
 				);
 			}
 			return prop.data as unknown as Awaited<

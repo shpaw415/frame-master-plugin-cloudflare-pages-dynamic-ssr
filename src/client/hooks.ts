@@ -26,7 +26,8 @@ export function useLoader<Loader extends LoaderManager<T>, T>(
 	}
 
 	// the bundler LoaderManager with the data fetcher.
-	return props?.find((prop) => prop.name === loader.name)?.data as never;
+	return props?.find((prop) => prop.name === (loader as LoaderManager<T>).name)
+		?.data as never;
 }
 
 export function useRequestContext<Env, P extends string, Data>() {
