@@ -36,6 +36,7 @@ export type StoreProvider = {
 		 * @default 86400 (1 day)
 		 */
 		ttl?: number;
+		skipCache?: boolean;
 		ctx: PluginEventContext;
 	}) => Promise<{ html: StoreType; props: StoreType }>;
 	delete: (pathname: string) => Promise<void>;
@@ -127,6 +128,7 @@ export function createStoreProvider<
 		module,
 		parser,
 		ttl,
+		skipCache = false,
 		ctx,
 	}) => {
 		const page = module.default;
@@ -188,11 +190,12 @@ export function createStoreProvider<
 			data: LoadersReturnValues,
 			expiresAt,
 		};
-
-		await Promise.all([
-			params.set(pathname, toStore(dataToStore), params.ctx),
-			_setStorePropsData(pathname, propsDataToStore),
-		]);
+		if (!skipCache) {
+			await Promise.all([
+				params.set(pathname, toStore(dataToStore), params.ctx),
+				_setStorePropsData(pathname, propsDataToStore),
+			]);
+		}
 
 		return { html: dataToStore, props: propsDataToStore };
 	};

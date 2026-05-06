@@ -67,13 +67,17 @@ export const CtxContext = createContext<PluginEventContext | null>(null);
 
 // Page config Section ----------------------------------------------------
 export type SSRPageConfigProps = {
-	callback: (ctx: PluginEventContext) => {
-		ttl?: number;
-	};
+	callback: (ctx: PluginEventContext) => SSRPageConfig | Promise<SSRPageConfig>;
 };
 
 export type SSRPageConfig = {
+	/** Time-to-live in seconds for both the rendered HTML and the loader props. Defaults to 86400 (24 hours) when omitted. */
 	ttl?: number;
+	/**
+	 * Whether to skip caching for this page. Defaults to false.
+	 * Useful for pages that should always fetch fresh data, such as admin pages or pages with frequently changing content.
+	 **/
+	skipCache?: boolean;
 };
 
 export class PageConfigManager {
@@ -81,7 +85,7 @@ export class PageConfigManager {
 	constructor(config: SSRPageConfigProps) {
 		this.configs = config;
 	}
-	getConfigs(ctx: PluginEventContext) {
+	async getConfigs(ctx: PluginEventContext) {
 		return this.configs.callback(ctx);
 	}
 }

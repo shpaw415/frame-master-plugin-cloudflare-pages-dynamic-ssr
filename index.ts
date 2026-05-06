@@ -199,7 +199,12 @@ export default function cloudflarePagesDynamicSSR(
 						const pathname = new URL(ctx.request.url).pathname;
 						const header = new Headers();
 
-						const pageConfigs = PageModule.ssr_configs?.getConfigs(ctx);
+						const pageConfigs = (await PageModule.ssr_configs?.getConfigs(
+							ctx,
+						)) || {
+							ttl: 86400,
+							skipCache: false,
+						};
 
 						if (acceptedTypes === "props") {
 							header.set(
@@ -207,7 +212,7 @@ export default function cloudflarePagesDynamicSSR(
 								"application/vnd.ssr.props+json; charset=utf-8",
 							);
 							const propsData =
-								process.env.NODE_ENV === "development"
+								process.env.NODE_ENV === "development" || pageConfigs.skipCache
 									? null
 									: await ctx.data.storeProvider.get.props(pathname);
 							if (propsData) return Response.json(propsData);
@@ -216,7 +221,8 @@ export default function cloudflarePagesDynamicSSR(
 								module: PageModule,
 								parser: ctx.data.parser,
 								ctx,
-								ttl: pageConfigs?.ttl ?? 86400,
+								skipCache: pageConfigs.skipCache,
+								ttl: pageConfigs.ttl,
 							});
 							return Response.json(props);
 						}
@@ -225,7 +231,7 @@ export default function cloudflarePagesDynamicSSR(
 						const storeProvider = ctx.data.storeProvider;
 
 						let storedData =
-							process.env.NODE_ENV === "development"
+							process.env.NODE_ENV === "development" || pageConfigs.skipCache
 								? null
 								: await storeProvider.get.page(pathname);
 
@@ -236,7 +242,8 @@ export default function cloudflarePagesDynamicSSR(
 									module: PageModule,
 									parser: ctx.data.parser,
 									ctx,
-									ttl: pageConfigs?.ttl ?? 86400,
+									ttl: pageConfigs.ttl,
+									skipCache: pageConfigs.skipCache,
 								})
 								.then(({ html }) => html);
 						}
