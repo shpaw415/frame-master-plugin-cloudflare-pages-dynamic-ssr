@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { NextJsStyleLayoutSetup } from "../../../src/utils/index.ts";
+import { NextJsStyleLayoutSetup } from "../../../src/utils/index.tsx";
 import Shell from "../shell";
 
 export function PageWrapper({

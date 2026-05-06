@@ -36,7 +36,11 @@ export const NextJsStyleLayoutSetup = {
 		return layouts.reduceRight((acc, layoutPath) => {
 			const LayoutComponent = customEntryPoints[layoutPath]
 				?.default as (props: { children: JSX.Element }) => JSX.Element;
-			return LayoutComponent ? LayoutComponent({ children: acc }) : acc;
+			return LayoutComponent ? (
+				<LayoutComponent key={layoutPath}>{acc}</LayoutComponent>
+			) : (
+				acc
+			);
 		}, children);
 	},
 	/**
