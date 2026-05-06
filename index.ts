@@ -277,15 +277,7 @@ export default function cloudflarePagesDynamicSSR(
 					);
 					const customEntrypoints = getCustomEntrypoints(entrypointMatcher);
 					return {
-						entrypoints: [
-							...Object.keys(customExtFiles),
-							"react",
-							"react-dom",
-							"node_modules/react/cjs/react-jsx-dev-runtime.development.js",
-							"node_modules/react/jsx-dev-runtime.js",
-							"node_modules/react/cjs/react.development.js",
-							"node_modules/react-dom/cjs/react-dom.development.js",
-						],
+						entrypoints: Object.keys(customExtFiles),
 						splitting: true,
 						files: {
 							...customExtFiles,
