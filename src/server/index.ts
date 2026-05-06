@@ -59,7 +59,7 @@ export function createLoader<T>(
 
 export type PluginEventContext<
 	Env = unknown,
-	Params extends string = "",
+	Params extends string = string,
 	Data = unknown,
 > = EventContext<
 	{ NODE_ENV: string } & Env & Cloudflare.Env,
