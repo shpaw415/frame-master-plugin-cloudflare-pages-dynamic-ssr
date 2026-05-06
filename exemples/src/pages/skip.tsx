@@ -15,7 +15,8 @@ export const ssr_configs = createPageConfig({
 
 export const loader_test = createLoader({
 	name: "test",
-	async callback() {
+	async callback(ctx) {
+		ctx.env;
 		return {
 			message: "This is a test loader",
 		};
