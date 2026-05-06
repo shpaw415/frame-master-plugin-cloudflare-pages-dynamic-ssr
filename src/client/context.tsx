@@ -20,6 +20,15 @@ export type SSRPropsProviderProps = {
 	 * false otherwise
 	 */
 	fetchCallback: (pathname: string, dynamicEndpoints: string[]) => boolean;
+
+	/**
+	 * A callback that is called after the props are fetched and set in the context, can be used to resolve the route change promise to allow the route change to complete.
+	 */
+	afterFetchCallback?: (
+		pathname: string,
+		props: Array<PropsData> | null,
+	) => void;
+
 	children: React.ReactNode;
 	/**
 	 * A ref to store the promise of the current route change, so that it can be awaited.
@@ -28,7 +37,7 @@ export type SSRPropsProviderProps = {
 	 */
 	promiseRef?: React.RefObject<Promise<Array<PropsData> | null> | null>;
 	/**
-	 * A to burst the cache of the loader, can be used in development to always fetch fresh data without caching.
+	 * A key to burst the cache of the loader, can be used in development to always fetch fresh data without caching.
 	 */
 	devKey?: number;
 };
@@ -39,6 +48,7 @@ export function SSRPropsProvider({
 	promiseRef,
 	devKey,
 	fetchCallback,
+	afterFetchCallback,
 }: SSRPropsProviderProps) {
 	const firstLoadPathnameRef = useRef<string | null>(pathname);
 
@@ -70,9 +80,12 @@ export function SSRPropsProvider({
 			if (promiseRef) {
 				promiseRef.current = fetchPromise;
 			}
+			if (afterFetchCallback) {
+				fetchPromise.then((data) => afterFetchCallback(pathname, data));
+			}
 			return fetchPromise;
 		},
-		[promiseRef],
+		[promiseRef, afterFetchCallback],
 	);
 
 	useEffect(() => {
