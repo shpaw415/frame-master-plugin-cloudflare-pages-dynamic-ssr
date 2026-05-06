@@ -1,6 +1,6 @@
 {
 	"name": "frame-master-plugin-cloudflare-pages-dynamic-ssr",
-	"version": "0.1.4",
+	"version": "0.2.0",
 	"type": "module",
 	"peerDependencies": {
 		"frame-master": "^3.1.6",
