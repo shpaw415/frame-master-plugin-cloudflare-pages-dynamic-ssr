@@ -1,4 +1,4 @@
 - [] advise when loader is not exported when client side has the LoaderManager instance
 - [] add a prop in the createPageConfig.callback to skip the Caching phase, for per request rendering.
 - [] warn when a dynamic page does not export ssr_configs
-- [] improve fetch resolving
+- [x] improve fetch resolving
