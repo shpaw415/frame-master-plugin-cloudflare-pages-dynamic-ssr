@@ -277,7 +277,16 @@ export default function cloudflarePagesDynamicSSR(
 					);
 					const customEntrypoints = getCustomEntrypoints(entrypointMatcher);
 					return {
-						entrypoints: Object.keys(customExtFiles),
+						entrypoints: [
+							...Object.keys(customExtFiles),
+							"react",
+							"react-dom",
+							"node_modules/react/cjs/react-jsx-dev-runtime.development.js",
+							"node_modules/react/jsx-dev-runtime.js",
+							"node_modules/react/cjs/react.development.js",
+							"node_modules/react-dom/cjs/react-dom.development.js",
+						],
+						splitting: true,
 						files: {
 							...customExtFiles,
 							"@cf-dynamic-ssr/custom-entrypoints.cfdynamicentrypoints": `
@@ -367,7 +376,6 @@ export default function cloudflarePagesDynamicSSR(
 							const createTranspiler = (
 								replace: Record<string, string>,
 								eliminate: string[],
-								autoImportJSX: boolean,
 							) =>
 								new Bun.Transpiler({
 									exports: {
@@ -378,7 +386,8 @@ export default function cloudflarePagesDynamicSSR(
 									treeShaking: false,
 									trimUnusedImports: false,
 									loader: "tsx",
-									autoImportJSX,
+									autoImportJSX: true,
+									jsxOptimizationInline: true,
 								});
 
 							const scanner = new Bun.Transpiler({ loader: "tsx" });
@@ -409,7 +418,6 @@ export default function cloudflarePagesDynamicSSR(
 										]),
 									),
 									["ssr_configs"],
-									!moduleLoaderData.imports.find((imp) => imp.path === "react"),
 								).transformSync(
 									contents,
 									(args.__chainedLoader as Bun.JavaScriptLoader) ??
@@ -435,7 +443,7 @@ export default function cloudflarePagesDynamicSSR(
 
 								return {
 									contents: transpiled,
-									loader: "tsx",
+									loader: "js",
 								};
 							});
 						},

@@ -5,6 +5,10 @@ import {
 	createPageConfig,
 	type PluginEventContext,
 } from "frame-master-plugin-cloudflare-pages-dynamic-ssr/server";
+import { useState } from "react";
+import { jsxDEV } from "react/jsx-dev-runtime";
+
+jsxDEV;
 
 export const ssr_configs = createPageConfig({
 	callback(ctx) {
@@ -26,7 +30,7 @@ export const loader_idData = createLoader({
 
 export default function Dynamic() {
 	const data = useLoader(loader_idData);
-	console.log({ data });
+	const [testData, setTestData] = useState(null);
 	return (
 		<div>
 			<h1>Dynamic page</h1>
