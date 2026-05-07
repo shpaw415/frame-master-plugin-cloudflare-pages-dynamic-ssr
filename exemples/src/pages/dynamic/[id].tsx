@@ -6,9 +6,6 @@ import {
 	type PluginEventContext,
 } from "frame-master-plugin-cloudflare-pages-dynamic-ssr/server";
 import { useState } from "react";
-import { jsxDEV } from "react/jsx-dev-runtime";
-
-jsxDEV;
 
 export const ssr_configs = createPageConfig({
 	callback(ctx) {
