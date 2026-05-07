@@ -1,3 +1,1 @@
-- [x] advise when loader is not exported when client side has the LoaderManager instance
-- [x] add a prop in the createPageConfig.callback to skip the Caching phase, for per request rendering.
-- [x] improve fetch resolving
+- [] use superJson for the props transfer.

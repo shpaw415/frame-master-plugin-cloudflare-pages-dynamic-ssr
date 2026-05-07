@@ -13,7 +13,11 @@ import { name, peerDependencies, version } from "./package.json";
 import type { RequestContextData } from "./src/provider/shared";
 import "frame-master-plugin-build-unifier";
 import type { JSX } from "react";
-import type { LoaderManager, PageConfigManager } from "./src/server";
+import type {
+	LoaderManager,
+	PageConfigManager,
+	PluginEventContext,
+} from "./src/server";
 
 declare module "frame-master/plugin/utils" {
 	interface CustomDirectives {
@@ -64,6 +68,16 @@ export type CloudflarePagesDynamicSSROptions = {
 };
 
 const cwd = process.cwd();
+
+function convertCatchAllToCloudflareCompatible(file: string) {
+	if (!file.match(/\[\.\.\..*\]\.(tsx|jsx)$/)) return file;
+	const pathParts = file.split("/");
+	const catchAllName = pathParts
+		.pop()
+		?.replace("[...", "[[")
+		.replace("]", "]]");
+	return join(...pathParts, catchAllName as string);
+}
 
 /**
  * cloudflare-pages-dynamic-ssr - Frame-Master Plugin
@@ -200,7 +214,7 @@ export default function cloudflarePagesDynamicSSR(
 						const header = new Headers();
 
 						const pageConfigs = (await PageModule.ssr_configs?.getConfigs(
-							ctx,
+							ctx as unknown as PluginEventContext,
 						)) || {
 							ttl: 86400,
 							skipCache: false,
@@ -220,7 +234,7 @@ export default function cloudflarePagesDynamicSSR(
 								pathname,
 								module: PageModule,
 								parser: ctx.data.parser,
-								ctx,
+								ctx: ctx as unknown as PluginEventContext,
 								skipCache: pageConfigs.skipCache,
 								ttl: pageConfigs.ttl,
 							});
@@ -241,7 +255,7 @@ export default function cloudflarePagesDynamicSSR(
 									pathname,
 									module: PageModule,
 									parser: ctx.data.parser,
-									ctx,
+									ctx: ctx as unknown as PluginEventContext,
 									ttl: pageConfigs.ttl,
 									skipCache: pageConfigs.skipCache,
 								})
@@ -262,7 +276,7 @@ export default function cloudflarePagesDynamicSSR(
 								relative(actionBasePath, fp),
 							);
 							return {
-								filePath: fp,
+								filePath: convertCatchAllToCloudflareCompatible(fp),
 								content: `
 								"no-action";
 								import * as PageModule from "${realPath}";
