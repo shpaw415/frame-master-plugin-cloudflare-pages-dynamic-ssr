@@ -3,7 +3,7 @@
 	"version": "0.2.0",
 	"type": "module",
 	"peerDependencies": {
-		"frame-master": "^3.1.6",
+		"frame-master": ">=3.1.6 || >=4.0.0-0",
 		"frame-master-plugin-cloudflare-pages-functions-action": "^3.0.0",
 		"frame-master-plugin-build-unifier": "^1.0.0"
 	},
@@ -38,6 +38,8 @@
 		"./revalidate": "./src/utils/revalidate.ts"
 	},
 	"scripts": {
+		"test": "bun test",
+		"typecheck": "tsc --noEmit",
 		"dev": "NODE_ENV=development bun frame-master dev",
 		"start": "NODE_ENV=production bun frame-master start",
 		"build:dev": "NODE_ENV=development bun frame-master build"

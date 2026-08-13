@@ -136,6 +136,22 @@ export default function cloudflarePagesDynamicSSR(
 		});
 	};
 
+	const customEntrypoints = getCustomEntrypoints(entrypointMatcher);
+	const customEntrypointsModule = `
+		${customEntrypoints
+			.map((fp, i) => `import * as _$${i} from "${fp}";`)
+			.join("\n")}
+
+		const customEntrypoints = {
+			${customEntrypoints
+				.map(
+					(fp, i) => `"${relative(join(cwd, basePath), fp)}": _$${i}`,
+				)
+				.join(",\n")}
+		};
+		export default customEntrypoints;
+	`;
+
 	const buildRoutes = async () =>
 		getGlobalPluginContext("build-unifier")
 			?.getBuilder?.(name)
@@ -168,6 +184,13 @@ export default function cloudflarePagesDynamicSSR(
 		version,
 		directives: [directive],
 		priority: -2,
+		virtualModules: {
+			"dynamic-ssr:entrypoints": {
+				contents: customEntrypointsModule,
+				loader: "js",
+				injectRuntime: true,
+			},
+		},
 		requirement: {
 			frameMasterVersion: peerDependencies["frame-master"],
 			bunVersion: ">=1.3.10",
@@ -296,24 +319,11 @@ export default function cloudflarePagesDynamicSSR(
 						},
 						{} as Record<string, string>,
 					);
-					const customEntrypoints = getCustomEntrypoints(entrypointMatcher);
 					return {
 						entrypoints: Object.keys(customExtFiles),
 						splitting: true,
 						files: {
 							...customExtFiles,
-							"@cf-dynamic-ssr/custom-entrypoints.cfdynamicentrypoints": `
-							${customEntrypoints.map((fp, i) => `import * as _$${i} from "${fp}";`).join("\n")}
-
-							const customEntrypoints = {
-								${customEntrypoints
-									.map(
-										(fp, i) => `"${relative(join(cwd, basePath), fp)}": _$${i}`,
-									)
-									.join(",\n")}
-							};
-							export default customEntrypoints;
-							`,
 							"@dynamic-ssr-endpoints.js": `
 							const endpoints = ${JSON.stringify(await getExtLess())}; 
 							export default endpoints;`,
@@ -323,36 +333,6 @@ export default function cloudflarePagesDynamicSSR(
 							".cfdynamicssr": "tsx",
 							".cfdynamicentrypoints": "ts",
 						},
-						plugins: [
-							{
-								name: "dynamic-ssr-import-custom-entrypoints",
-								setup(build) {
-									build.onResolve(
-										{
-											filter: /dynamic-ssr:entrypoints/,
-										},
-										(args) => {
-											return {
-												path: args.path,
-												namespace: "dynamic-ssr-custom-entrypoints",
-											};
-										},
-									);
-									build.onLoad(
-										{
-											filter: /dynamic-ssr:entrypoints/,
-											namespace: "dynamic-ssr-custom-entrypoints",
-										},
-										async () => {
-											return {
-												contents: `export { default } from "@cf-dynamic-ssr/custom-entrypoints.cfdynamicentrypoints";`,
-												loader: "js",
-											};
-										},
-									);
-								},
-							},
-						],
 					};
 				},
 			});
