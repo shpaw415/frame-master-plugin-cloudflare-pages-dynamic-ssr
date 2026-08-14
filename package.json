@@ -3,7 +3,7 @@
 	"version": "0.2.0",
 	"type": "module",
 	"peerDependencies": {
-		"frame-master": ">=3.1.6 || >=4.0.0-0",
+		"frame-master": ">=4.0.0-0",
 		"frame-master-plugin-cloudflare-pages-functions-action": "^3.0.0",
 		"frame-master-plugin-build-unifier": "^1.0.0"
 	},
