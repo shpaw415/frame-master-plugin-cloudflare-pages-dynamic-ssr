@@ -342,6 +342,25 @@ export default endpoints;`;
 							".cfdynamicssr": "tsx",
 							".cfdynamicentrypoints": "ts",
 						},
+						plugins: [
+							{
+								name: "resolve-dynamic-page-module",
+								setup(build) {
+									build.onResolve({ filter: /\.cfdynamicssr$/ }, (args) => {
+										return {
+											path: args.path,
+											namespace: "dynamic-ssr-entrypoints",
+										};
+									});
+									build.onLoad({ filter: /\.cfdynamicssr$/, namespace: "dynamic-ssr-entrypoints" }, (args) => {
+										return {
+											contents: customExtFiles[args.path] as string,
+											loader: "ts",
+										};
+									});
+								},
+							}
+						]
 					};
 				},
 			});
