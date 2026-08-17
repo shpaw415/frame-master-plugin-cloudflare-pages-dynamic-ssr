@@ -3,7 +3,7 @@ declare module "dynamic-ssr:entrypoints" {
 	export default entrypoints;
 }
 
-declare module "@dynamic-ssr-endpoints" {
+declare module "@dynamic-ssr-endpoints.js" {
 	const endpoints: string[];
 	export default endpoints;
 }
