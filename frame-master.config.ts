@@ -13,6 +13,9 @@ export default {
 	HTTPServer: {
 		port: 3000,
 	},
+	pluginOptions: {
+		
+	},
 	plugins: [
 		...buildUnifier({
 			plugins: [

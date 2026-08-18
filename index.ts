@@ -1,8 +1,9 @@
 import { watch } from "node:fs";
-import { extname, join, relative, normalize } from "node:path";
+import { extname, join, relative, resolve } from "node:path";
 import {
 	type Directives,
 	type FrameMasterPlugin,
+	getChainableContent,
 	getGlobalPluginContext,
 } from "frame-master/plugin";
 import {
@@ -90,6 +91,7 @@ export default function cloudflarePagesDynamicSSR(
 		basePath = "src/pages",
 		entrypointMatcher = [],
 	} = options;
+	const pagesRoot = resolve(cwd, basePath);
 
 	const directive = createDirective(
 		"use-dynamic" as Directives,
@@ -136,8 +138,9 @@ export default function cloudflarePagesDynamicSSR(
 		});
 	};
 
-	const customEntrypoints = getCustomEntrypoints(entrypointMatcher);
-	const customEntrypointsModule = `
+	const generateEntrypointsModule = () => {
+		const customEntrypoints = getCustomEntrypoints(entrypointMatcher);
+		return `
 		${customEntrypoints
 			.map((fp, i) => `import * as _$${i} from "${fp}";`)
 			.join("\n")}
@@ -145,12 +148,13 @@ export default function cloudflarePagesDynamicSSR(
 		const customEntrypoints = {
 			${customEntrypoints
 				.map(
-					(fp, i) => `"${relative(join(cwd, basePath), fp)}": _$${i}`,
+					(fp, i) => `"${relative(pagesRoot, fp)}": _$${i}`,
 				)
 				.join(",\n")}
 		};
 		export default customEntrypoints;
 	`;
+	};
 
 	const buildRoutes = async () =>
 		getGlobalPluginContext("build-unifier")
@@ -164,7 +168,7 @@ export default function cloudflarePagesDynamicSSR(
 	const getExtLess = async () => {
 		const filePathsList = await getDynamicFiles();
 		const relativeFilePathsList = filePathsList.map((fp) =>
-			relative(join(cwd, basePath), fp),
+			relative(pagesRoot, fp),
 		);
 		const extless_relative_fp = relativeFilePathsList
 			.map((fp) => fp.slice(0, -extname(fp).length))
@@ -177,6 +181,12 @@ export default function cloudflarePagesDynamicSSR(
 		return extless_relative_fp;
 	};
 
+	const generateEndpointsModule = async () => {
+		const endpoints = await getExtLess();
+		return `const endpoints = ${JSON.stringify(endpoints)};
+export default endpoints;`;
+	};
+
 	let isDynamicModuleBuild = false;
 
 	return {
@@ -186,9 +196,14 @@ export default function cloudflarePagesDynamicSSR(
 		priority: -2,
 		virtualModules: {
 			"dynamic-ssr:entrypoints": {
-				contents: customEntrypointsModule,
+				contents: generateEntrypointsModule,
 				loader: "js",
 				injectRuntime: true,
+			},
+			"@dynamic-ssr-endpoints.js": {
+				contents: generateEndpointsModule,
+				loader: "js",
+				injectRuntime: false,
 			},
 		},
 		requirement: {
@@ -208,7 +223,7 @@ export default function cloudflarePagesDynamicSSR(
 				buildConfig: async () => {
 					const filePathsList = await getDynamicFiles();
 					const relativeFilePathsList = filePathsList.map((fp) =>
-						relative(join(cwd, basePath), fp),
+						relative(pagesRoot, fp),
 					);
 					const pageToActionFilePathList = relativeFilePathsList.map(
 						(relativeFilePath) => join(actionBasePath, relativeFilePath),
@@ -294,8 +309,7 @@ export default function cloudflarePagesDynamicSSR(
 					const files = await Promise.all(
 						pageToActionFilePathList.map((fp) => {
 							const realPath = join(
-								cwd,
-								basePath,
+								pagesRoot,
 								relative(actionBasePath, fp),
 							);
 							return {
@@ -322,17 +336,31 @@ export default function cloudflarePagesDynamicSSR(
 					return {
 						entrypoints: Object.keys(customExtFiles),
 						splitting: true,
-						files: {
-							...customExtFiles,
-							"@dynamic-ssr-endpoints.js": `
-							const endpoints = ${JSON.stringify(await getExtLess())}; 
-							export default endpoints;`,
-						},
+						files: customExtFiles,
 						target: "browser",
 						loader: {
 							".cfdynamicssr": "tsx",
 							".cfdynamicentrypoints": "ts",
 						},
+						plugins: [
+							{
+								name: "resolve-dynamic-page-module",
+								setup(build) {
+									build.onResolve({ filter: /\.cfdynamicssr$/ }, (args) => {
+										return {
+											path: args.path,
+											namespace: "dynamic-ssr-entrypoints",
+										};
+									});
+									build.onLoad({ filter: /\.cfdynamicssr$/, namespace: "dynamic-ssr-entrypoints" }, (args) => {
+										return {
+											contents: customExtFiles[args.path] as string,
+											loader: "ts",
+										};
+									});
+								},
+							}
+						]
 					};
 				},
 			});
@@ -355,13 +383,8 @@ export default function cloudflarePagesDynamicSSR(
 				});
 				await Bun.sleep(1000);
 			},
-			buildConfig: async () => ({
+			buildConfig: {
 				entrypoints: ["@dynamic-ssr-endpoints.js"],
-				files: {
-					"@dynamic-ssr-endpoints.js": `
-					const endpoints = ${JSON.stringify(await getExtLess())}; 
-					export default endpoints;`,
-				},
 				plugins: [
 					{
 						name: "transform-dynamic-page-module",
@@ -392,9 +415,7 @@ export default function cloudflarePagesDynamicSSR(
 								);
 								if (!isDynamicModule) return;
 
-								const contents =
-									(args.__chainedContents as string) ??
-									(await Bun.file(args.path).text());
+								const contents = await getChainableContent(args);
 
 								const moduleLoaderData = scanner.scan(contents);
 
@@ -417,7 +438,7 @@ export default function cloudflarePagesDynamicSSR(
 										(args.loader as Bun.JavaScriptLoader),
 								);
 
-								const relativePath = relative(join(cwd, basePath), args.path);
+								const relativePath = relative(pagesRoot, args.path);
 								const ext = extname(args.path);
 								const relativePathExtLess = relativePath.slice(0, -ext.length);
 								const relativePathname = relativePathExtLess.endsWith("/index")
@@ -442,7 +463,7 @@ export default function cloudflarePagesDynamicSSR(
 						},
 					},
 				],
-			}),
+			},
 		},
 		async onFileSystemChange(_ev, _fp, abs) {
 			directiveToolSingleton.clearPaths();
