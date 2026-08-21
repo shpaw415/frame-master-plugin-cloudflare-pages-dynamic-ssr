@@ -1,6 +1,6 @@
 {
 	"name": "frame-master-plugin-cloudflare-pages-dynamic-ssr",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"type": "module",
 	"repository": {
 		"type": "git",
