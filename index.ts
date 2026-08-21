@@ -468,6 +468,7 @@ export default endpoints;`;
 		async onFileSystemChange(_ev, _fp, abs) {
 			directiveToolSingleton.clearPaths();
 			if (
+				!abs.startsWith(basePath) ||
 				!(await directiveToolSingleton.pathIs("use-dynamic" as Directives, abs))
 			)
 				return;
